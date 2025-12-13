@@ -128,4 +128,8 @@ test('should be able to start, update, and submit an application', async () => {
   response = await post(`${url}/applications/${id}/submit`, {});
 
   expect(response.status).toBe(200);
+  body = await response.json();
+  expect(body.quotePrice).toBeDefined();
+  expect(typeof body.quotePrice).toBe('number');
+  expect(body.quotePrice).toBeGreaterThan(0);
 });
