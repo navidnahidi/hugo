@@ -45,8 +45,17 @@ export async function createApplication(
       `
       ).run(applicationId);
 
-      // Create primary driver if provided
-      if (validatedData.primaryDriver) {
+      // Create primary driver if all required fields are provided
+      if (
+        validatedData.primaryDriver &&
+        validatedData.primaryDriver.firstName &&
+        validatedData.primaryDriver.lastName &&
+        validatedData.primaryDriver.dateOfBirth &&
+        validatedData.primaryDriver.gender &&
+        validatedData.primaryDriver.maritalStatus &&
+        validatedData.primaryDriver.driversLicense?.number &&
+        validatedData.primaryDriver.driversLicense?.state
+      ) {
         const driverId = uuidv4();
         const driver = validatedData.primaryDriver;
 
@@ -65,8 +74,8 @@ export async function createApplication(
           driver.dateOfBirth,
           driver.gender,
           driver.maritalStatus,
-          driver.driversLicense?.number,
-          driver.driversLicense?.state
+          driver.driversLicense!.number,
+          driver.driversLicense!.state
         );
 
         // Link to application
@@ -77,8 +86,14 @@ export async function createApplication(
         ).run(driverId, applicationId);
       }
 
-      // Create mailing address if provided
-      if (validatedData.mailingAddress) {
+      // Create mailing address if all required fields are provided
+      if (
+        validatedData.mailingAddress &&
+        validatedData.mailingAddress.street &&
+        validatedData.mailingAddress.city &&
+        validatedData.mailingAddress.state &&
+        validatedData.mailingAddress.zipCode
+      ) {
         const addressId = uuidv4();
         const address = validatedData.mailingAddress;
 
@@ -107,8 +122,14 @@ export async function createApplication(
         ).run(addressId, applicationId);
       }
 
-      // Create garaging address if provided
-      if (validatedData.garagingAddress) {
+      // Create garaging address if all required fields are provided
+      if (
+        validatedData.garagingAddress &&
+        validatedData.garagingAddress.street &&
+        validatedData.garagingAddress.city &&
+        validatedData.garagingAddress.state &&
+        validatedData.garagingAddress.zipCode
+      ) {
         const addressId = uuidv4();
         const address = validatedData.garagingAddress;
 
@@ -150,25 +171,34 @@ export async function createApplication(
         }
       }
 
-      // Create additional drivers if provided
+      // Create additional drivers if all required fields are provided
       if (validatedData.additionalDrivers) {
         for (const [driverId, driver] of Object.entries(validatedData.additionalDrivers)) {
-          db.prepare(
-            `
-            INSERT INTO additional_drivers (
-              id, application_id, first_name, last_name, date_of_birth,
-              gender, relationship, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          `
-          ).run(
-            driverId,
-            applicationId,
-            driver.firstName,
-            driver.lastName,
-            driver.dateOfBirth,
-            driver.gender,
+          // Only insert if all required fields are present
+          if (
+            driver.firstName &&
+            driver.lastName &&
+            driver.dateOfBirth &&
+            driver.gender &&
             driver.relationship
-          );
+          ) {
+            db.prepare(
+              `
+              INSERT INTO additional_drivers (
+                id, application_id, first_name, last_name, date_of_birth,
+                gender, relationship, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            `
+            ).run(
+              driverId,
+              applicationId,
+              driver.firstName,
+              driver.lastName,
+              driver.dateOfBirth,
+              driver.gender,
+              driver.relationship
+            );
+          }
         }
       }
     });
@@ -191,6 +221,244 @@ export async function createApplication(
 
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     console.error('Error creating application:', error);
+    return {
+      error: 'Internal server error',
+      message: errorMessage,
+    };
+  }
+}
+
+export interface GetApplicationResult {
+  id: string;
+  primaryDriver?: {
+    firstName: string;
+    lastName: string;
+    dateOfBirth: string;
+    gender: string;
+    maritalStatus: string;
+    driversLicense: {
+      number: string;
+      state: string;
+    };
+  };
+  mailingAddress?: {
+    street: string;
+    unit?: string;
+    city: string;
+    state: string;
+    zipCode: string;
+  };
+  garagingAddress?: {
+    street: string;
+    city: string;
+    state: string;
+    zipCode: string;
+  };
+  vehicles?: {
+    [id: string]: {
+      make: string;
+      model: string;
+      year: number;
+      vin: string;
+    };
+  };
+  additionalDrivers?: {
+    [id: string]: {
+      firstName: string;
+      lastName: string;
+      dateOfBirth: string;
+      gender: string;
+      relationship: string;
+    };
+  };
+  status: string;
+  submittedAt?: string;
+  quotePrice?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotFoundError {
+  error: 'Not found';
+  message: string;
+}
+
+export type GetApplicationError = NotFoundError | ServerError;
+
+export async function getApplication(
+  id: string
+): Promise<GetApplicationResult | GetApplicationError> {
+  try {
+    // Get application
+    const application = db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as
+      | {
+          id: string;
+          primary_driver_id: string | null;
+          mailing_address_id: string | null;
+          garaging_address_id: string | null;
+          status: string;
+          submitted_at: string | null;
+          quote_price: number | null;
+          created_at: string;
+          updated_at: string;
+        }
+      | undefined;
+
+    if (!application) {
+      return {
+        error: 'Not found',
+        message: `Application with id ${id} not found`,
+      };
+    }
+
+    const result: GetApplicationResult = {
+      id: application.id,
+      status: application.status,
+      createdAt: application.created_at,
+      updatedAt: application.updated_at,
+    };
+
+    if (application.submitted_at) {
+      result.submittedAt = application.submitted_at;
+    }
+
+    if (application.quote_price !== null) {
+      result.quotePrice = application.quote_price;
+    }
+
+    // Get primary driver if exists
+    if (application.primary_driver_id) {
+      const driver = db
+        .prepare('SELECT * FROM primary_drivers WHERE id = ?')
+        .get(application.primary_driver_id) as
+        | {
+            first_name: string;
+            last_name: string;
+            date_of_birth: string;
+            gender: string;
+            marital_status: string;
+            drivers_license_number: string;
+            drivers_license_state: string;
+          }
+        | undefined;
+
+      if (driver) {
+        result.primaryDriver = {
+          firstName: driver.first_name,
+          lastName: driver.last_name,
+          dateOfBirth: driver.date_of_birth,
+          gender: driver.gender,
+          maritalStatus: driver.marital_status,
+          driversLicense: {
+            number: driver.drivers_license_number,
+            state: driver.drivers_license_state,
+          },
+        };
+      }
+    }
+
+    // Get mailing address if exists
+    if (application.mailing_address_id) {
+      const address = db
+        .prepare('SELECT * FROM mailing_addresses WHERE id = ?')
+        .get(application.mailing_address_id) as
+        | {
+            street: string;
+            unit: string | null;
+            city: string;
+            state: string;
+            zip_code: string;
+          }
+        | undefined;
+
+      if (address) {
+        result.mailingAddress = {
+          street: address.street,
+          city: address.city,
+          state: address.state,
+          zipCode: address.zip_code,
+        };
+        if (address.unit) {
+          result.mailingAddress.unit = address.unit;
+        }
+      }
+    }
+
+    // Get garaging address if exists
+    if (application.garaging_address_id) {
+      const address = db
+        .prepare('SELECT * FROM garaging_addresses WHERE id = ?')
+        .get(application.garaging_address_id) as
+        | {
+            street: string;
+            city: string;
+            state: string;
+            zip_code: string;
+          }
+        | undefined;
+
+      if (address) {
+        result.garagingAddress = {
+          street: address.street,
+          city: address.city,
+          state: address.state,
+          zipCode: address.zip_code,
+        };
+      }
+    }
+
+    // Get vehicles
+    const vehicles = db
+      .prepare('SELECT * FROM vehicles WHERE application_id = ?')
+      .all(application.id) as Array<{
+      id: string;
+      make: string;
+      model: string;
+      year: number;
+      vin: string;
+    }>;
+
+    if (vehicles.length > 0) {
+      result.vehicles = {};
+      for (const vehicle of vehicles) {
+        result.vehicles[vehicle.id] = {
+          make: vehicle.make,
+          model: vehicle.model,
+          year: vehicle.year,
+          vin: vehicle.vin,
+        };
+      }
+    }
+
+    // Get additional drivers
+    const additionalDrivers = db
+      .prepare('SELECT * FROM additional_drivers WHERE application_id = ?')
+      .all(application.id) as Array<{
+      id: string;
+      first_name: string;
+      last_name: string;
+      date_of_birth: string;
+      gender: string;
+      relationship: string;
+    }>;
+
+    if (additionalDrivers.length > 0) {
+      result.additionalDrivers = {};
+      for (const driver of additionalDrivers) {
+        result.additionalDrivers[driver.id] = {
+          firstName: driver.first_name,
+          lastName: driver.last_name,
+          dateOfBirth: driver.date_of_birth,
+          gender: driver.gender,
+          relationship: driver.relationship,
+        };
+      }
+    }
+
+    return result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    console.error('Error getting application:', error);
     return {
       error: 'Internal server error',
       message: errorMessage,

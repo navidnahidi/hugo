@@ -1,5 +1,5 @@
 import Router from '@koa/router';
-import { createApplication } from '../controllers/applications';
+import { createApplication, getApplication } from '../controllers/applications';
 
 const applicationsRouter = new Router({
   prefix: '/applications',
@@ -20,8 +20,15 @@ applicationsRouter.post('/', async (ctx) => {
 
 // GET /applications/:id - Get application by ID
 applicationsRouter.get('/:id', async (ctx) => {
-  ctx.status = 200;
-  ctx.body = { message: `GET /applications/${ctx.params.id} - stub` };
+  const result = await getApplication(ctx.params.id);
+
+  if ('error' in result) {
+    ctx.status = result.error === 'Not found' ? 404 : 500;
+    ctx.body = result;
+  } else {
+    ctx.status = 200;
+    ctx.body = result;
+  }
 });
 
 // PATCH /applications/:id - Update application
