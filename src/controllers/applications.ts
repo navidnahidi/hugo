@@ -1,9 +1,5 @@
 import { ZodError } from 'zod';
-import {
-  applicationSchema,
-  applicationSubmissionSchema,
-  type Application,
-} from './schemas/application';
+import { applicationSchema, applicationSubmissionSchema } from './schemas/application';
 import * as ApplicationModel from '../models/application';
 import type {
   JsonObject,
@@ -120,63 +116,6 @@ export async function getApplication(
       message: errorMessage,
     };
   }
-}
-
-// Helper function to deep merge objects
-function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial<T>): T {
-  const result = { ...target };
-
-  for (const key in source) {
-    if (source[key] !== undefined) {
-      const sourceValue = source[key];
-      const targetValue = result[key];
-
-      // Handle records (vehicles, additionalDrivers) - merge at record level
-      if (key === 'vehicles' || key === 'additionalDrivers') {
-        const targetRecord = (targetValue as Record<string, unknown>) || {};
-        const sourceRecord = (sourceValue as Record<string, unknown>) || {};
-
-        // Merge records: combine keys, and deep merge values if same key exists
-        const mergedRecord: Record<string, unknown> = { ...targetRecord };
-        for (const recordKey in sourceRecord) {
-          if (
-            targetRecord[recordKey] &&
-            typeof targetRecord[recordKey] === 'object' &&
-            !Array.isArray(targetRecord[recordKey])
-          ) {
-            // Deep merge the nested object
-            mergedRecord[recordKey] = deepMerge(
-              targetRecord[recordKey] as Record<string, unknown>,
-              sourceRecord[recordKey] as Record<string, unknown>
-            );
-          } else {
-            // Replace or add new
-            mergedRecord[recordKey] = sourceRecord[recordKey];
-          }
-        }
-        result[key] = mergedRecord as T[Extract<keyof T, string>];
-      }
-      // Deep merge nested objects (primaryDriver, mailingAddress, etc.)
-      else if (
-        sourceValue &&
-        typeof sourceValue === 'object' &&
-        !Array.isArray(sourceValue) &&
-        targetValue &&
-        typeof targetValue === 'object' &&
-        !Array.isArray(targetValue)
-      ) {
-        result[key] = deepMerge(
-          targetValue as Record<string, unknown>,
-          sourceValue as Record<string, unknown>
-        ) as T[Extract<keyof T, string>];
-      } else {
-        // Replace primitive or simple value
-        result[key] = sourceValue as T[Extract<keyof T, string>];
-      }
-    }
-  }
-
-  return result;
 }
 
 export async function updateApplication(
