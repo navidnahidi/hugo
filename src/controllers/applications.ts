@@ -238,36 +238,6 @@ export async function updateApplication(
   }
 }
 
-// Helper function to delete a property from an object using a dot-separated path
-function deleteByPath(obj: Record<string, unknown>, path: string): boolean {
-  const parts = path.split('.');
-
-  if (parts.length === 0) {
-    return false;
-  }
-
-  // Navigate to the parent of the property to delete
-  let current: unknown = obj;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const part = parts[i];
-    if (current && typeof current === 'object' && !Array.isArray(current) && part in current) {
-      current = (current as Record<string, unknown>)[part];
-    } else {
-      // Path doesn't exist
-      return false;
-    }
-  }
-
-  // Delete the final property
-  const finalKey = parts[parts.length - 1];
-  if (current && typeof current === 'object' && !Array.isArray(current) && finalKey in current) {
-    delete (current as Record<string, unknown>)[finalKey];
-    return true;
-  }
-
-  return false;
-}
-
 export async function deleteApplicationData(
   id: string,
   path: string
@@ -305,21 +275,8 @@ export async function deleteApplicationData(
       };
     }
 
-    // Get existing application JSON data
-    const existingData = ApplicationModel.getApplicationData(id);
-
-    if (!existingData) {
-      return {
-        error: 'Not found',
-        message: `Application data not found for id ${id}`,
-      };
-    }
-
-    // Create a copy to modify
-    const updatedData = JSON.parse(JSON.stringify(existingData)) as Application;
-
-    // Delete the property at the specified path
-    const deleted = deleteByPath(updatedData, path);
+    // Delete the path directly using SQLite's json_remove
+    const deleted = ApplicationModel.deleteApplicationDataPath(id, path);
 
     if (!deleted) {
       return {
@@ -334,27 +291,47 @@ export async function deleteApplicationData(
       };
     }
 
+    // Get the updated data to check if parent objects are empty and validate
+    const updatedData = ApplicationModel.getApplicationData(id);
+
+    if (!updatedData) {
+      return {
+        error: 'Not found',
+        message: `Application data not found for id ${id}`,
+      };
+    }
+
     // If we deleted a vehicle or additional driver, check if the parent object is now empty
     // and remove it if so (to avoid validation errors)
     if (path.startsWith('vehicles.')) {
-      const vehicleId = path.split('.')[1];
       if (updatedData.vehicles && Object.keys(updatedData.vehicles).length === 0) {
-        delete updatedData.vehicles;
+        // Remove empty vehicles object using SQLite
+        ApplicationModel.deleteApplicationDataPath(id, 'vehicles');
       }
     }
     if (path.startsWith('additionalDrivers.')) {
-      const driverId = path.split('.')[1];
       if (
         updatedData.additionalDrivers &&
         Object.keys(updatedData.additionalDrivers).length === 0
       ) {
-        delete updatedData.additionalDrivers;
+        // Remove empty additionalDrivers object using SQLite
+        ApplicationModel.deleteApplicationDataPath(id, 'additionalDrivers');
       }
+    }
+
+    // Get the final data after potential cleanup
+    const finalData = ApplicationModel.getApplicationData(id);
+
+    if (!finalData) {
+      return {
+        error: 'Not found',
+        message: `Application data not found for id ${id}`,
+      };
     }
 
     // Validate the updated data is still valid
     // Use safeParse to get detailed validation errors
-    const validationResult = applicationSchema.safeParse(updatedData);
+    const validationResult = applicationSchema.safeParse(finalData);
 
     if (!validationResult.success) {
       // Log validation errors for debugging
@@ -367,11 +344,6 @@ export async function deleteApplicationData(
         details: validationResult.error.issues,
       };
     }
-
-    const validatedData = validationResult.data;
-
-    // Update application JSON data in database
-    ApplicationModel.updateApplicationData(id, validatedData);
 
     return {
       id,

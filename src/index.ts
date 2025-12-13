@@ -10,7 +10,12 @@ const app = new Koa();
 const router = new Router();
 
 // Add body parser middleware
-app.use(bodyParser());
+// Include DELETE in parsedMethods so DELETE requests with JSON bodies are parsed
+app.use(
+  bodyParser({
+    parsedMethods: ['POST', 'PUT', 'PATCH', 'DELETE'],
+  })
+);
 
 // Basic health check route
 router.get('/', async (ctx) => {

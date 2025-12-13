@@ -79,3 +79,43 @@ export function submitApplication(id: string, quotePrice: number): void {
   `
   ).run(quotePrice, id);
 }
+
+/**
+ * Delete a path from the JSON data using SQLite's json_remove function
+ * @param id Application ID
+ * @param path Dot-separated path (e.g., "vehicles.ABC123")
+ * @returns true if the path existed and was deleted, false if path didn't exist
+ */
+export function deleteApplicationDataPath(id: string, path: string): boolean {
+  // Convert dot-separated path to SQLite JSON path format
+  // e.g., "vehicles.ABC123" -> "$.vehicles.ABC123"
+  const jsonPath = `$.${path.split('.').join('.')}`;
+
+  // Check if the path exists before deletion
+  const exists = db
+    .prepare(
+      `
+    SELECT json_extract(data, ?) as value
+    FROM applications
+    WHERE id = ? AND data IS NOT NULL
+  `
+    )
+    .get(jsonPath, id) as { value: unknown } | undefined;
+
+  if (!exists || exists.value === null) {
+    return false;
+  }
+
+  // Use json_remove to delete the path directly in SQLite
+  const result = db
+    .prepare(
+      `
+    UPDATE applications 
+    SET data = json_remove(data, ?), updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `
+    )
+    .run(jsonPath, id);
+
+  return result.changes > 0;
+}
