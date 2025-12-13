@@ -264,9 +264,7 @@ export async function getApplication(
 
     // Get garaging address if exists
     if (application.garaging_address_id) {
-      const address = GaragingAddressModel.getGaragingAddressById(
-        application.garaging_address_id
-      );
+      const address = GaragingAddressModel.getGaragingAddressById(application.garaging_address_id);
 
       if (address) {
         result.garagingAddress = {
@@ -332,11 +330,7 @@ export interface ForbiddenError {
   message: string;
 }
 
-export type UpdateApplicationError =
-  | NotFoundError
-  | ForbiddenError
-  | ValidationError
-  | ServerError;
+export type UpdateApplicationError = NotFoundError | ForbiddenError | ValidationError | ServerError;
 
 export async function updateApplication(
   id: string,
@@ -404,8 +398,7 @@ export async function updateApplication(
       // Update or create mailing address
       if (validatedData.mailingAddress) {
         const address = validatedData.mailingAddress;
-        const hasAllFields =
-          address.street && address.city && address.state && address.zipCode;
+        const hasAllFields = address.street && address.city && address.state && address.zipCode;
 
         if (hasAllFields) {
           if (application.mailing_address_id) {
@@ -422,8 +415,7 @@ export async function updateApplication(
       // Update or create garaging address
       if (validatedData.garagingAddress) {
         const address = validatedData.garagingAddress;
-        const hasAllFields =
-          address.street && address.city && address.state && address.zipCode;
+        const hasAllFields = address.street && address.city && address.state && address.zipCode;
 
         if (hasAllFields) {
           if (application.garaging_address_id) {
