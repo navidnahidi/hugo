@@ -85,12 +85,13 @@ export async function getApplication(
       return result;
     }
 
-    // If not submitted, validate the application data
+    // If not submitted, validate the application data using submission schema
+    // This checks if the application is "completely valid" (ready for submission)
     if (applicationData) {
-      const validationResult = applicationSchema.safeParse(applicationData);
+      const validationResult = applicationSubmissionSchema.safeParse(applicationData);
 
       if (validationResult.success) {
-        // Application is valid - calculate and include quote price
+        // Application is completely valid - calculate and include quote price
         result.quotePrice = generateQuotePrice();
       } else {
         // Application has validation errors - include them in the response
