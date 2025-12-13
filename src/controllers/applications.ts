@@ -205,16 +205,24 @@ export async function updateApplication(
       };
     }
 
-    // Get existing application JSON data
-    const existingData = ApplicationModel.getApplicationData(id) || ({} as Application);
+    // Use SQLite's json_patch to merge the partial data directly in the database
+    // This is more efficient than fetching, merging in JS, and updating
+    ApplicationModel.patchApplicationData(id, validatedPartialData);
 
-    // Deep merge existing data with new partial data
-    const mergedData = deepMerge(existingData, validatedPartialData);
+    // Fetch the merged data to validate it
+    const mergedData = ApplicationModel.getApplicationData(id);
+
+    if (!mergedData) {
+      return {
+        error: 'Internal server error',
+        message: 'Failed to retrieve merged application data',
+      };
+    }
 
     // Validate the merged data to ensure it's still valid
     const validatedMergedData = applicationSchema.parse(mergedData);
 
-    // Update application JSON data in database
+    // Update with validated data (in case validation changed anything)
     ApplicationModel.updateApplicationData(id, validatedMergedData);
 
     return {

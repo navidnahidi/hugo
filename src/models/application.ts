@@ -48,6 +48,27 @@ export function updateApplicationData(id: string, data: Application): void {
   ).run(dataJson, id);
 }
 
+/**
+ * Update application data using SQLite's json_patch for merging JSON
+ * This is more efficient than fetching, merging in JS, and updating
+ * @param id Application ID
+ * @param patchData Partial JSON data to merge (RFC 7396 JSON Merge Patch)
+ * @returns true if update was successful
+ */
+export function patchApplicationData(id: string, patchData: Application): boolean {
+  const patchJson = JSON.stringify(patchData);
+  const result = db
+    .prepare(
+      `
+    UPDATE applications 
+    SET data = json_patch(COALESCE(data, '{}'), ?), updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `
+    )
+    .run(patchJson, id);
+  return result.changes > 0;
+}
+
 export function updateApplicationStatus(id: string, status: 'draft' | 'submitted'): void {
   db.prepare(
     `
