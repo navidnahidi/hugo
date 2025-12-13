@@ -37,6 +37,7 @@ export class ValidationError extends ApplicationError {
   toJSON() {
     return {
       error: this.errorType,
+      message: this.message,
       details: this.details,
     };
   }
