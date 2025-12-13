@@ -1,7 +1,12 @@
-import { v4 as uuidv4 } from 'uuid';
 import { ZodError } from 'zod';
-import { applicationSchema, type Application } from './schemas/application';
+import { applicationSchema } from './schemas/application';
 import { db, dbAsync } from '../models/db';
+import * as ApplicationModel from '../models/application';
+import * as PrimaryDriverModel from '../models/primaryDriver';
+import * as MailingAddressModel from '../models/mailingAddress';
+import * as GaragingAddressModel from '../models/garagingAddress';
+import * as VehicleModel from '../models/vehicle';
+import * as AdditionalDriverModel from '../models/additionalDriver';
 
 export interface CreateApplicationResult {
   id: string;
@@ -32,19 +37,11 @@ export async function createApplication(
     // Validate request data
     const validatedData = applicationSchema.parse(data);
 
-    // Generate application ID
-    const applicationId = uuidv4();
+    // Create application
+    const applicationId = ApplicationModel.createApplication();
 
     // Start transaction
     const transaction = db.transaction(() => {
-      // Create application record
-      db.prepare(
-        `
-        INSERT INTO applications (id, status, created_at, updated_at)
-        VALUES (?, 'draft', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `
-      ).run(applicationId);
-
       // Create primary driver if all required fields are provided
       if (
         validatedData.primaryDriver &&
@@ -56,34 +53,11 @@ export async function createApplication(
         validatedData.primaryDriver.driversLicense?.number &&
         validatedData.primaryDriver.driversLicense?.state
       ) {
-        const driverId = uuidv4();
-        const driver = validatedData.primaryDriver;
-
-        db.prepare(
-          `
-          INSERT INTO primary_drivers (
-            id, first_name, last_name, date_of_birth, gender,
-            marital_status, drivers_license_number, drivers_license_state,
-            created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        `
-        ).run(
-          driverId,
-          driver.firstName,
-          driver.lastName,
-          driver.dateOfBirth,
-          driver.gender,
-          driver.maritalStatus,
-          driver.driversLicense!.number,
-          driver.driversLicense!.state
-        );
-
-        // Link to application
-        db.prepare(
-          `
-          UPDATE applications SET primary_driver_id = ? WHERE id = ?
-        `
-        ).run(driverId, applicationId);
+        const driverId = PrimaryDriverModel.createPrimaryDriver({
+          ...validatedData.primaryDriver,
+          driversLicense: validatedData.primaryDriver.driversLicense!,
+        });
+        ApplicationModel.linkPrimaryDriver(applicationId, driverId);
       }
 
       // Create mailing address if all required fields are provided
@@ -94,32 +68,11 @@ export async function createApplication(
         validatedData.mailingAddress.state &&
         validatedData.mailingAddress.zipCode
       ) {
-        const addressId = uuidv4();
-        const address = validatedData.mailingAddress;
-
-        db.prepare(
-          `
-          INSERT INTO mailing_addresses (
-            id, application_id, street, unit, city, state, zip_code,
-            created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        `
-        ).run(
-          addressId,
+        const addressId = MailingAddressModel.createMailingAddress(
           applicationId,
-          address.street,
-          address.unit || null,
-          address.city,
-          address.state,
-          address.zipCode
+          validatedData.mailingAddress
         );
-
-        // Link to application
-        db.prepare(
-          `
-          UPDATE applications SET mailing_address_id = ? WHERE id = ?
-        `
-        ).run(addressId, applicationId);
+        ApplicationModel.linkMailingAddress(applicationId, addressId);
       }
 
       // Create garaging address if all required fields are provided
@@ -130,51 +83,25 @@ export async function createApplication(
         validatedData.garagingAddress.state &&
         validatedData.garagingAddress.zipCode
       ) {
-        const addressId = uuidv4();
-        const address = validatedData.garagingAddress;
-
-        db.prepare(
-          `
-          INSERT INTO garaging_addresses (
-            id, application_id, street, city, state, zip_code,
-            created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        `
-        ).run(
-          addressId,
+        const addressId = GaragingAddressModel.createGaragingAddress(
           applicationId,
-          address.street,
-          address.city,
-          address.state,
-          address.zipCode
+          validatedData.garagingAddress
         );
-
-        // Link to application
-        db.prepare(
-          `
-          UPDATE applications SET garaging_address_id = ? WHERE id = ?
-        `
-        ).run(addressId, applicationId);
+        ApplicationModel.linkGaragingAddress(applicationId, addressId);
       }
 
       // Create vehicles if provided
       if (validatedData.vehicles) {
         for (const [vehicleId, vehicle] of Object.entries(validatedData.vehicles)) {
-          db.prepare(
-            `
-            INSERT INTO vehicles (
-              id, application_id, make, model, year, vin,
-              created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          `
-          ).run(vehicleId, applicationId, vehicle.make, vehicle.model, vehicle.year, vehicle.vin);
+          if (vehicle.make && vehicle.model && vehicle.year && vehicle.vin) {
+            VehicleModel.createVehicle(vehicleId, applicationId, vehicle);
+          }
         }
       }
 
       // Create additional drivers if all required fields are provided
       if (validatedData.additionalDrivers) {
         for (const [driverId, driver] of Object.entries(validatedData.additionalDrivers)) {
-          // Only insert if all required fields are present
           if (
             driver.firstName &&
             driver.lastName &&
@@ -182,22 +109,7 @@ export async function createApplication(
             driver.gender &&
             driver.relationship
           ) {
-            db.prepare(
-              `
-              INSERT INTO additional_drivers (
-                id, application_id, first_name, last_name, date_of_birth,
-                gender, relationship, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            `
-            ).run(
-              driverId,
-              applicationId,
-              driver.firstName,
-              driver.lastName,
-              driver.dateOfBirth,
-              driver.gender,
-              driver.relationship
-            );
+            AdditionalDriverModel.createAdditionalDriver(driverId, applicationId, driver);
           }
         }
       }
@@ -290,19 +202,7 @@ export async function getApplication(
 ): Promise<GetApplicationResult | GetApplicationError> {
   try {
     // Get application
-    const application = db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as
-      | {
-          id: string;
-          primary_driver_id: string | null;
-          mailing_address_id: string | null;
-          garaging_address_id: string | null;
-          status: string;
-          submitted_at: string | null;
-          quote_price: number | null;
-          created_at: string;
-          updated_at: string;
-        }
-      | undefined;
+    const application = ApplicationModel.getApplicationById(id);
 
     if (!application) {
       return {
@@ -328,19 +228,7 @@ export async function getApplication(
 
     // Get primary driver if exists
     if (application.primary_driver_id) {
-      const driver = db
-        .prepare('SELECT * FROM primary_drivers WHERE id = ?')
-        .get(application.primary_driver_id) as
-        | {
-            first_name: string;
-            last_name: string;
-            date_of_birth: string;
-            gender: string;
-            marital_status: string;
-            drivers_license_number: string;
-            drivers_license_state: string;
-          }
-        | undefined;
+      const driver = PrimaryDriverModel.getPrimaryDriverById(application.primary_driver_id);
 
       if (driver) {
         result.primaryDriver = {
@@ -359,17 +247,7 @@ export async function getApplication(
 
     // Get mailing address if exists
     if (application.mailing_address_id) {
-      const address = db
-        .prepare('SELECT * FROM mailing_addresses WHERE id = ?')
-        .get(application.mailing_address_id) as
-        | {
-            street: string;
-            unit: string | null;
-            city: string;
-            state: string;
-            zip_code: string;
-          }
-        | undefined;
+      const address = MailingAddressModel.getMailingAddressById(application.mailing_address_id);
 
       if (address) {
         result.mailingAddress = {
@@ -386,16 +264,9 @@ export async function getApplication(
 
     // Get garaging address if exists
     if (application.garaging_address_id) {
-      const address = db
-        .prepare('SELECT * FROM garaging_addresses WHERE id = ?')
-        .get(application.garaging_address_id) as
-        | {
-            street: string;
-            city: string;
-            state: string;
-            zip_code: string;
-          }
-        | undefined;
+      const address = GaragingAddressModel.getGaragingAddressById(
+        application.garaging_address_id
+      );
 
       if (address) {
         result.garagingAddress = {
@@ -408,15 +279,7 @@ export async function getApplication(
     }
 
     // Get vehicles
-    const vehicles = db
-      .prepare('SELECT * FROM vehicles WHERE application_id = ?')
-      .all(application.id) as Array<{
-      id: string;
-      make: string;
-      model: string;
-      year: number;
-      vin: string;
-    }>;
+    const vehicles = VehicleModel.getVehiclesByApplicationId(application.id);
 
     if (vehicles.length > 0) {
       result.vehicles = {};
@@ -431,16 +294,9 @@ export async function getApplication(
     }
 
     // Get additional drivers
-    const additionalDrivers = db
-      .prepare('SELECT * FROM additional_drivers WHERE application_id = ?')
-      .all(application.id) as Array<{
-      id: string;
-      first_name: string;
-      last_name: string;
-      date_of_birth: string;
-      gender: string;
-      relationship: string;
-    }>;
+    const additionalDrivers = AdditionalDriverModel.getAdditionalDriversByApplicationId(
+      application.id
+    );
 
     if (additionalDrivers.length > 0) {
       result.additionalDrivers = {};
@@ -459,6 +315,191 @@ export async function getApplication(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     console.error('Error getting application:', error);
+    return {
+      error: 'Internal server error',
+      message: errorMessage,
+    };
+  }
+}
+
+export interface UpdateApplicationResult {
+  id: string;
+  message: string;
+}
+
+export interface ForbiddenError {
+  error: 'Forbidden';
+  message: string;
+}
+
+export type UpdateApplicationError =
+  | NotFoundError
+  | ForbiddenError
+  | ValidationError
+  | ServerError;
+
+export async function updateApplication(
+  id: string,
+  data: JsonObject
+): Promise<UpdateApplicationResult | UpdateApplicationError> {
+  try {
+    // Validate request data
+    const validatedData = applicationSchema.parse(data);
+
+    // Get existing application
+    const application = ApplicationModel.getApplicationById(id);
+
+    if (!application) {
+      return {
+        error: 'Not found',
+        message: `Application with id ${id} not found`,
+      };
+    }
+
+    // Check if application is already submitted
+    if (application.status === 'submitted') {
+      return {
+        error: 'Forbidden',
+        message: 'Cannot update a submitted application',
+      };
+    }
+
+    // Start transaction
+    const transaction = db.transaction(() => {
+      // Update application timestamp
+      ApplicationModel.updateApplicationTimestamp(id);
+
+      // Update or create primary driver
+      if (validatedData.primaryDriver) {
+        const driver = validatedData.primaryDriver;
+
+        // Check if all required fields are present for a complete update
+        const hasAllFields =
+          driver.firstName &&
+          driver.lastName &&
+          driver.dateOfBirth &&
+          driver.gender &&
+          driver.maritalStatus &&
+          driver.driversLicense?.number &&
+          driver.driversLicense?.state;
+
+        if (hasAllFields) {
+          if (application.primary_driver_id) {
+            // Update existing primary driver
+            PrimaryDriverModel.updatePrimaryDriver(application.primary_driver_id, {
+              ...driver,
+              driversLicense: driver.driversLicense!,
+            });
+          } else {
+            // Create new primary driver
+            const driverId = PrimaryDriverModel.createPrimaryDriver({
+              ...driver,
+              driversLicense: driver.driversLicense!,
+            });
+            ApplicationModel.linkPrimaryDriver(id, driverId);
+          }
+        }
+      }
+
+      // Update or create mailing address
+      if (validatedData.mailingAddress) {
+        const address = validatedData.mailingAddress;
+        const hasAllFields =
+          address.street && address.city && address.state && address.zipCode;
+
+        if (hasAllFields) {
+          if (application.mailing_address_id) {
+            // Update existing address
+            MailingAddressModel.updateMailingAddress(application.mailing_address_id, address);
+          } else {
+            // Create new address
+            const addressId = MailingAddressModel.createMailingAddress(id, address);
+            ApplicationModel.linkMailingAddress(id, addressId);
+          }
+        }
+      }
+
+      // Update or create garaging address
+      if (validatedData.garagingAddress) {
+        const address = validatedData.garagingAddress;
+        const hasAllFields =
+          address.street && address.city && address.state && address.zipCode;
+
+        if (hasAllFields) {
+          if (application.garaging_address_id) {
+            // Update existing address
+            GaragingAddressModel.updateGaragingAddress(application.garaging_address_id, address);
+          } else {
+            // Create new address
+            const addressId = GaragingAddressModel.createGaragingAddress(id, address);
+            ApplicationModel.linkGaragingAddress(id, addressId);
+          }
+        }
+      }
+
+      // Update or create vehicles
+      if (validatedData.vehicles) {
+        for (const [vehicleId, vehicle] of Object.entries(validatedData.vehicles)) {
+          const hasAllFields = vehicle.make && vehicle.model && vehicle.year && vehicle.vin;
+
+          if (hasAllFields) {
+            // Check if vehicle exists
+            const existingVehicle = VehicleModel.getVehicleById(vehicleId, id);
+
+            if (existingVehicle) {
+              // Update existing vehicle
+              VehicleModel.updateVehicle(vehicleId, id, vehicle);
+            } else {
+              // Create new vehicle
+              VehicleModel.createVehicle(vehicleId, id, vehicle);
+            }
+          }
+        }
+      }
+
+      // Update or create additional drivers
+      if (validatedData.additionalDrivers) {
+        for (const [driverId, driver] of Object.entries(validatedData.additionalDrivers)) {
+          const hasAllFields =
+            driver.firstName &&
+            driver.lastName &&
+            driver.dateOfBirth &&
+            driver.gender &&
+            driver.relationship;
+
+          if (hasAllFields) {
+            // Check if driver exists
+            const existingDriver = AdditionalDriverModel.getAdditionalDriverById(driverId, id);
+
+            if (existingDriver) {
+              // Update existing driver
+              AdditionalDriverModel.updateAdditionalDriver(driverId, id, driver);
+            } else {
+              // Create new driver
+              AdditionalDriverModel.createAdditionalDriver(driverId, id, driver);
+            }
+          }
+        }
+      }
+    });
+
+    // Execute transaction
+    await dbAsync(() => transaction());
+
+    return {
+      id,
+      message: 'Application updated successfully',
+    };
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return {
+        error: 'Validation error',
+        details: error.issues,
+      };
+    }
+
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    console.error('Error updating application:', error);
     return {
       error: 'Internal server error',
       message: errorMessage,

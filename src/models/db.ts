@@ -1,7 +1,15 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 
-const dbPath = process.env.DB_PATH || path.join(process.cwd(), 'applications.db');
+// Use test database in test environment, otherwise use DB_PATH or default
+const getDbPath = () => {
+  if (process.env.NODE_ENV === 'test') {
+    return process.env.TEST_DB_PATH || path.join(process.cwd(), 'test.db');
+  }
+  return process.env.DB_PATH || path.join(process.cwd(), 'applications.db');
+};
+
+const dbPath = getDbPath();
 
 // Create database connection
 export const db = new Database(dbPath);

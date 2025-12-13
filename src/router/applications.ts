@@ -1,5 +1,5 @@
 import Router from '@koa/router';
-import { createApplication, getApplication } from '../controllers/applications';
+import { createApplication, getApplication, updateApplication } from '../controllers/applications';
 
 const applicationsRouter = new Router({
   prefix: '/applications',
@@ -13,7 +13,7 @@ applicationsRouter.post('/', async (ctx) => {
     ctx.status = result.error === 'Validation error' ? 400 : 500;
     ctx.body = result;
   } else {
-    ctx.status = 201;
+    ctx.status = 200;
     ctx.body = result;
   }
 });
@@ -33,8 +33,23 @@ applicationsRouter.get('/:id', async (ctx) => {
 
 // PATCH /applications/:id - Update application
 applicationsRouter.patch('/:id', async (ctx) => {
-  ctx.status = 200;
-  ctx.body = { message: `PATCH /applications/${ctx.params.id} - stub` };
+  const result = await updateApplication(ctx.params.id, ctx.request.body);
+
+  if ('error' in result) {
+    if (result.error === 'Not found') {
+      ctx.status = 404;
+    } else if (result.error === 'Forbidden') {
+      ctx.status = 403;
+    } else if (result.error === 'Validation error') {
+      ctx.status = 400;
+    } else {
+      ctx.status = 500;
+    }
+    ctx.body = result;
+  } else {
+    ctx.status = 200;
+    ctx.body = result;
+  }
 });
 
 // DELETE /applications/:id/data - Remove data from application

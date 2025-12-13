@@ -21,3 +21,4 @@ dist-ssr
 .DS_Store
 
 *.db
+test.db

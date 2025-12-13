@@ -1,7 +1,35 @@
 import dotenv from 'dotenv';
-import { expect, test } from 'vitest';
+import { expect, test, beforeAll } from 'vitest';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import path from 'path';
+import fs from 'fs';
 
-dotenv.config();
+const execAsync = promisify(exec);
+
+// Load test environment variables
+dotenv.config({ path: path.resolve(process.cwd(), '.env.test') });
+
+// Set NODE_ENV to test
+process.env.NODE_ENV = 'test';
+
+// Run migrations before tests
+beforeAll(async () => {
+  // Clean up test database if it exists
+  const testDbPath = process.env.TEST_DB_PATH || 'test.db';
+  if (fs.existsSync(testDbPath)) {
+    fs.unlinkSync(testDbPath);
+  }
+
+  // Run migrations on test database
+  try {
+    await execAsync('npm run migrate', {
+      env: { ...process.env, NODE_ENV: 'test' },
+    });
+  } catch (error) {
+    console.error('Failed to run migrations:', error);
+  }
+});
 
 const del = async (url: string, body: any) =>
   fetch(url, {
