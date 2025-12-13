@@ -1,16 +1,6 @@
 import { db } from './db';
 import type { Vehicle } from '../controllers/schemas/application';
-
-export interface VehicleRecord {
-  id: string;
-  application_id: string;
-  make: string;
-  model: string;
-  year: number;
-  vin: string;
-  created_at: string;
-  updated_at: string;
-}
+import type { VehicleRecord } from './types';
 
 export function createVehicle(vehicleId: string, applicationId: string, vehicle: Vehicle): void {
   db.prepare(
@@ -20,7 +10,14 @@ export function createVehicle(vehicleId: string, applicationId: string, vehicle:
       created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `
-  ).run(vehicleId, applicationId, vehicle.make!, vehicle.model!, vehicle.year!, vehicle.vin!);
+  ).run(
+    vehicleId,
+    applicationId,
+    vehicle.make || null,
+    vehicle.model || null,
+    vehicle.year || null,
+    vehicle.vin || null
+  );
 }
 
 export function getVehiclesByApplicationId(applicationId: string): VehicleRecord[] {
@@ -39,6 +36,9 @@ export function getVehicleById(
 }
 
 export function updateVehicle(vehicleId: string, applicationId: string, vehicle: Vehicle): void {
+  // Get existing vehicle to merge with
+  const existing = getVehicleById(vehicleId, applicationId);
+
   db.prepare(
     `
     UPDATE vehicles SET
@@ -49,7 +49,14 @@ export function updateVehicle(vehicleId: string, applicationId: string, vehicle:
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND application_id = ?
   `
-  ).run(vehicle.make!, vehicle.model!, vehicle.year!, vehicle.vin!, vehicleId, applicationId);
+  ).run(
+    vehicle.make ?? existing?.make ?? null,
+    vehicle.model ?? existing?.model ?? null,
+    vehicle.year ?? existing?.year ?? null,
+    vehicle.vin ?? existing?.vin ?? null,
+    vehicleId,
+    applicationId
+  );
 }
 
 export function deleteVehicle(vehicleId: string, applicationId: string): void {

@@ -1,17 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { db } from './db';
 import type { Address } from '../controllers/schemas/application';
-
-export interface GaragingAddressRecord {
-  id: string;
-  application_id: string;
-  street: string;
-  city: string;
-  state: string;
-  zip_code: string;
-  created_at: string;
-  updated_at: string;
-}
+import type { GaragingAddressRecord } from './types';
 
 export function createGaragingAddress(applicationId: string, address: Address): string {
   const addressId = uuidv4();
@@ -22,7 +12,14 @@ export function createGaragingAddress(applicationId: string, address: Address): 
       created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `
-  ).run(addressId, applicationId, address.street!, address.city!, address.state!, address.zipCode!);
+  ).run(
+    addressId,
+    applicationId,
+    address.street || null,
+    address.city || null,
+    address.state || null,
+    address.zipCode || null
+  );
   return addressId;
 }
 
@@ -33,6 +30,9 @@ export function getGaragingAddressById(id: string): GaragingAddressRecord | unde
 }
 
 export function updateGaragingAddress(id: string, address: Address): void {
+  // Get existing address to merge with
+  const existing = getGaragingAddressById(id);
+
   db.prepare(
     `
     UPDATE garaging_addresses SET
@@ -43,5 +43,11 @@ export function updateGaragingAddress(id: string, address: Address): void {
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `
-  ).run(address.street!, address.city!, address.state!, address.zipCode!, id);
+  ).run(
+    address.street ?? existing?.street ?? null,
+    address.city ?? existing?.city ?? null,
+    address.state ?? existing?.state ?? null,
+    address.zipCode ?? existing?.zip_code ?? null,
+    id
+  );
 }

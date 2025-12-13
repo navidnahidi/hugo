@@ -3,16 +3,17 @@ import type { Database as DatabaseType } from 'better-sqlite3';
 
 export default function run(db: DatabaseType) {
   // Create primary_drivers table
+  // Fields are nullable to allow partial data storage (but must be valid if provided)
   db.exec(`
     CREATE TABLE IF NOT EXISTS primary_drivers (
       id TEXT PRIMARY KEY,
-      first_name TEXT NOT NULL,
-      last_name TEXT NOT NULL,
-      date_of_birth DATE NOT NULL,
-      gender TEXT NOT NULL CHECK (gender IN ('male', 'female', 'non-binary')),
-      marital_status TEXT NOT NULL CHECK (marital_status IN ('single', 'married', 'divorced', 'widowed')),
-      drivers_license_number TEXT NOT NULL CHECK (LENGTH(drivers_license_number) = 9),
-      drivers_license_state TEXT NOT NULL CHECK (LENGTH(drivers_license_state) = 2),
+      first_name TEXT,
+      last_name TEXT,
+      date_of_birth DATE,
+      gender TEXT CHECK (gender IS NULL OR gender IN ('male', 'female', 'non-binary')),
+      marital_status TEXT CHECK (marital_status IS NULL OR marital_status IN ('single', 'married', 'divorced', 'widowed')),
+      drivers_license_number TEXT CHECK (drivers_license_number IS NULL OR LENGTH(drivers_license_number) = 9),
+      drivers_license_state TEXT CHECK (drivers_license_state IS NULL OR LENGTH(drivers_license_state) = 2),
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )

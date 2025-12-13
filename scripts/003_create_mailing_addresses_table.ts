@@ -3,15 +3,16 @@ import type { Database as DatabaseType } from 'better-sqlite3';
 
 export default function run(db: DatabaseType) {
   // Create mailing_addresses table
+  // Fields are nullable to allow partial data storage (but must be valid if provided)
   db.exec(`
     CREATE TABLE IF NOT EXISTS mailing_addresses (
       id TEXT PRIMARY KEY,
       application_id TEXT NOT NULL,
-      street TEXT NOT NULL,
+      street TEXT,
       unit TEXT,
-      city TEXT NOT NULL,
-      state TEXT NOT NULL CHECK (LENGTH(state) = 2),
-      zip_code TEXT NOT NULL CHECK (LENGTH(zip_code) = 5),
+      city TEXT,
+      state TEXT CHECK (state IS NULL OR LENGTH(state) = 2),
+      zip_code TEXT CHECK (zip_code IS NULL OR LENGTH(zip_code) = 5),
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )

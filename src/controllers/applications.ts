@@ -7,28 +7,16 @@ import * as MailingAddressModel from '../models/mailingAddress';
 import * as GaragingAddressModel from '../models/garagingAddress';
 import * as VehicleModel from '../models/vehicle';
 import * as AdditionalDriverModel from '../models/additionalDriver';
-
-export interface CreateApplicationResult {
-  id: string;
-  message: string;
-}
-
-export interface ValidationError {
-  error: 'Validation error';
-  details: ZodError['issues'];
-}
-
-export interface ServerError {
-  error: 'Internal server error';
-  message: string;
-}
-
-export type CreateApplicationError = ValidationError | ServerError;
-
-// Type for unvalidated JSON input
-type JsonValue = string | number | boolean | null | JsonObject | JsonArray;
-type JsonObject = { [key: string]: JsonValue };
-type JsonArray = JsonValue[];
+import type {
+  JsonObject,
+  CreateApplicationResult,
+  CreateApplicationError,
+  GetApplicationResult,
+  GetApplicationError,
+  UpdateApplicationResult,
+  UpdateApplicationError,
+  ValidationError,
+} from './types';
 
 export async function createApplication(
   data: JsonObject
@@ -42,32 +30,14 @@ export async function createApplication(
 
     // Start transaction
     const transaction = db.transaction(() => {
-      // Create primary driver if all required fields are provided
-      if (
-        validatedData.primaryDriver &&
-        validatedData.primaryDriver.firstName &&
-        validatedData.primaryDriver.lastName &&
-        validatedData.primaryDriver.dateOfBirth &&
-        validatedData.primaryDriver.gender &&
-        validatedData.primaryDriver.maritalStatus &&
-        validatedData.primaryDriver.driversLicense?.number &&
-        validatedData.primaryDriver.driversLicense?.state
-      ) {
-        const driverId = PrimaryDriverModel.createPrimaryDriver({
-          ...validatedData.primaryDriver,
-          driversLicense: validatedData.primaryDriver.driversLicense!,
-        });
+      // Create primary driver if provided (partial data is OK - Zod validates what's provided)
+      if (validatedData.primaryDriver) {
+        const driverId = PrimaryDriverModel.createPrimaryDriver(validatedData.primaryDriver);
         ApplicationModel.linkPrimaryDriver(applicationId, driverId);
       }
 
-      // Create mailing address if all required fields are provided
-      if (
-        validatedData.mailingAddress &&
-        validatedData.mailingAddress.street &&
-        validatedData.mailingAddress.city &&
-        validatedData.mailingAddress.state &&
-        validatedData.mailingAddress.zipCode
-      ) {
+      // Create mailing address if provided (partial data is OK)
+      if (validatedData.mailingAddress) {
         const addressId = MailingAddressModel.createMailingAddress(
           applicationId,
           validatedData.mailingAddress
@@ -75,14 +45,8 @@ export async function createApplication(
         ApplicationModel.linkMailingAddress(applicationId, addressId);
       }
 
-      // Create garaging address if all required fields are provided
-      if (
-        validatedData.garagingAddress &&
-        validatedData.garagingAddress.street &&
-        validatedData.garagingAddress.city &&
-        validatedData.garagingAddress.state &&
-        validatedData.garagingAddress.zipCode
-      ) {
+      // Create garaging address if provided (partial data is OK)
+      if (validatedData.garagingAddress) {
         const addressId = GaragingAddressModel.createGaragingAddress(
           applicationId,
           validatedData.garagingAddress
@@ -90,27 +54,17 @@ export async function createApplication(
         ApplicationModel.linkGaragingAddress(applicationId, addressId);
       }
 
-      // Create vehicles if provided
+      // Create vehicles if provided (partial data is OK)
       if (validatedData.vehicles) {
         for (const [vehicleId, vehicle] of Object.entries(validatedData.vehicles)) {
-          if (vehicle.make && vehicle.model && vehicle.year && vehicle.vin) {
-            VehicleModel.createVehicle(vehicleId, applicationId, vehicle);
-          }
+          VehicleModel.createVehicle(vehicleId, applicationId, vehicle);
         }
       }
 
-      // Create additional drivers if all required fields are provided
+      // Create additional drivers if provided (partial data is OK)
       if (validatedData.additionalDrivers) {
         for (const [driverId, driver] of Object.entries(validatedData.additionalDrivers)) {
-          if (
-            driver.firstName &&
-            driver.lastName &&
-            driver.dateOfBirth &&
-            driver.gender &&
-            driver.relationship
-          ) {
-            AdditionalDriverModel.createAdditionalDriver(driverId, applicationId, driver);
-          }
+          AdditionalDriverModel.createAdditionalDriver(driverId, applicationId, driver);
         }
       }
     });
@@ -139,63 +93,6 @@ export async function createApplication(
     };
   }
 }
-
-export interface GetApplicationResult {
-  id: string;
-  primaryDriver?: {
-    firstName: string;
-    lastName: string;
-    dateOfBirth: string;
-    gender: string;
-    maritalStatus: string;
-    driversLicense: {
-      number: string;
-      state: string;
-    };
-  };
-  mailingAddress?: {
-    street: string;
-    unit?: string;
-    city: string;
-    state: string;
-    zipCode: string;
-  };
-  garagingAddress?: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-  };
-  vehicles?: {
-    [id: string]: {
-      make: string;
-      model: string;
-      year: number;
-      vin: string;
-    };
-  };
-  additionalDrivers?: {
-    [id: string]: {
-      firstName: string;
-      lastName: string;
-      dateOfBirth: string;
-      gender: string;
-      relationship: string;
-    };
-  };
-  status: string;
-  submittedAt?: string;
-  quotePrice?: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface NotFoundError {
-  error: 'Not found';
-  message: string;
-}
-
-export type GetApplicationError = NotFoundError | ServerError;
 
 export async function getApplication(
   id: string
@@ -231,17 +128,28 @@ export async function getApplication(
       const driver = PrimaryDriverModel.getPrimaryDriverById(application.primary_driver_id);
 
       if (driver) {
-        result.primaryDriver = {
-          firstName: driver.first_name,
-          lastName: driver.last_name,
-          dateOfBirth: driver.date_of_birth,
-          gender: driver.gender,
-          maritalStatus: driver.marital_status,
-          driversLicense: {
+        const primaryDriver: {
+          firstName?: string;
+          lastName?: string;
+          dateOfBirth?: string;
+          gender?: string;
+          maritalStatus?: string;
+          driversLicense?: { number: string; state: string };
+        } = {};
+        if (driver.first_name) primaryDriver.firstName = driver.first_name;
+        if (driver.last_name) primaryDriver.lastName = driver.last_name;
+        if (driver.date_of_birth) primaryDriver.dateOfBirth = driver.date_of_birth;
+        if (driver.gender) primaryDriver.gender = driver.gender;
+        if (driver.marital_status) primaryDriver.maritalStatus = driver.marital_status;
+        if (driver.drivers_license_number && driver.drivers_license_state) {
+          primaryDriver.driversLicense = {
             number: driver.drivers_license_number,
             state: driver.drivers_license_state,
-          },
-        };
+          };
+        }
+        if (Object.keys(primaryDriver).length > 0) {
+          result.primaryDriver = primaryDriver;
+        }
       }
     }
 
@@ -250,14 +158,20 @@ export async function getApplication(
       const address = MailingAddressModel.getMailingAddressById(application.mailing_address_id);
 
       if (address) {
-        result.mailingAddress = {
-          street: address.street,
-          city: address.city,
-          state: address.state,
-          zipCode: address.zip_code,
-        };
-        if (address.unit) {
-          result.mailingAddress.unit = address.unit;
+        const mailingAddress: {
+          street?: string;
+          city?: string;
+          state?: string;
+          zipCode?: string;
+          unit?: string;
+        } = {};
+        if (address.street) mailingAddress.street = address.street;
+        if (address.city) mailingAddress.city = address.city;
+        if (address.state) mailingAddress.state = address.state;
+        if (address.zip_code) mailingAddress.zipCode = address.zip_code;
+        if (address.unit) mailingAddress.unit = address.unit;
+        if (Object.keys(mailingAddress).length > 0) {
+          result.mailingAddress = mailingAddress;
         }
       }
     }
@@ -267,12 +181,19 @@ export async function getApplication(
       const address = GaragingAddressModel.getGaragingAddressById(application.garaging_address_id);
 
       if (address) {
-        result.garagingAddress = {
-          street: address.street,
-          city: address.city,
-          state: address.state,
-          zipCode: address.zip_code,
-        };
+        const garagingAddress: {
+          street?: string;
+          city?: string;
+          state?: string;
+          zipCode?: string;
+        } = {};
+        if (address.street) garagingAddress.street = address.street;
+        if (address.city) garagingAddress.city = address.city;
+        if (address.state) garagingAddress.state = address.state;
+        if (address.zip_code) garagingAddress.zipCode = address.zip_code;
+        if (Object.keys(garagingAddress).length > 0) {
+          result.garagingAddress = garagingAddress;
+        }
       }
     }
 
@@ -282,12 +203,19 @@ export async function getApplication(
     if (vehicles.length > 0) {
       result.vehicles = {};
       for (const vehicle of vehicles) {
-        result.vehicles[vehicle.id] = {
-          make: vehicle.make,
-          model: vehicle.model,
-          year: vehicle.year,
-          vin: vehicle.vin,
-        };
+        const vehicleData: {
+          make?: string;
+          model?: string;
+          year?: number;
+          vin?: string;
+        } = {};
+        if (vehicle.make) vehicleData.make = vehicle.make;
+        if (vehicle.model) vehicleData.model = vehicle.model;
+        if (vehicle.year !== null) vehicleData.year = vehicle.year;
+        if (vehicle.vin) vehicleData.vin = vehicle.vin;
+        if (Object.keys(vehicleData).length > 0) {
+          result.vehicles[vehicle.id] = vehicleData;
+        }
       }
     }
 
@@ -299,13 +227,21 @@ export async function getApplication(
     if (additionalDrivers.length > 0) {
       result.additionalDrivers = {};
       for (const driver of additionalDrivers) {
-        result.additionalDrivers[driver.id] = {
-          firstName: driver.first_name,
-          lastName: driver.last_name,
-          dateOfBirth: driver.date_of_birth,
-          gender: driver.gender,
-          relationship: driver.relationship,
-        };
+        const driverData: {
+          firstName?: string;
+          lastName?: string;
+          dateOfBirth?: string;
+          gender?: string;
+          relationship?: string;
+        } = {};
+        if (driver.first_name) driverData.firstName = driver.first_name;
+        if (driver.last_name) driverData.lastName = driver.last_name;
+        if (driver.date_of_birth) driverData.dateOfBirth = driver.date_of_birth;
+        if (driver.gender) driverData.gender = driver.gender;
+        if (driver.relationship) driverData.relationship = driver.relationship;
+        if (Object.keys(driverData).length > 0) {
+          result.additionalDrivers[driver.id] = driverData;
+        }
       }
     }
 
@@ -319,18 +255,6 @@ export async function getApplication(
     };
   }
 }
-
-export interface UpdateApplicationResult {
-  id: string;
-  message: string;
-}
-
-export interface ForbiddenError {
-  error: 'Forbidden';
-  message: string;
-}
-
-export type UpdateApplicationError = NotFoundError | ForbiddenError | ValidationError | ServerError;
 
 export async function updateApplication(
   id: string,
@@ -363,113 +287,85 @@ export async function updateApplication(
       // Update application timestamp
       ApplicationModel.updateApplicationTimestamp(id);
 
-      // Update or create primary driver
+      // Update or create primary driver (partial data is OK - Zod validates what's provided)
       if (validatedData.primaryDriver) {
-        const driver = validatedData.primaryDriver;
-
-        // Check if all required fields are present for a complete update
-        const hasAllFields =
-          driver.firstName &&
-          driver.lastName &&
-          driver.dateOfBirth &&
-          driver.gender &&
-          driver.maritalStatus &&
-          driver.driversLicense?.number &&
-          driver.driversLicense?.state;
-
-        if (hasAllFields) {
-          if (application.primary_driver_id) {
-            // Update existing primary driver
-            PrimaryDriverModel.updatePrimaryDriver(application.primary_driver_id, {
-              ...driver,
-              driversLicense: driver.driversLicense!,
-            });
-          } else {
-            // Create new primary driver
-            const driverId = PrimaryDriverModel.createPrimaryDriver({
-              ...driver,
-              driversLicense: driver.driversLicense!,
-            });
-            ApplicationModel.linkPrimaryDriver(id, driverId);
-          }
+        if (application.primary_driver_id) {
+          // Update existing primary driver
+          PrimaryDriverModel.updatePrimaryDriver(
+            application.primary_driver_id,
+            validatedData.primaryDriver
+          );
+        } else {
+          // Create new primary driver
+          const driverId = PrimaryDriverModel.createPrimaryDriver(validatedData.primaryDriver);
+          ApplicationModel.linkPrimaryDriver(id, driverId);
         }
       }
 
-      // Update or create mailing address
+      // Update or create mailing address (partial data is OK)
       if (validatedData.mailingAddress) {
-        const address = validatedData.mailingAddress;
-        const hasAllFields = address.street && address.city && address.state && address.zipCode;
-
-        if (hasAllFields) {
-          if (application.mailing_address_id) {
-            // Update existing address
-            MailingAddressModel.updateMailingAddress(application.mailing_address_id, address);
-          } else {
-            // Create new address
-            const addressId = MailingAddressModel.createMailingAddress(id, address);
-            ApplicationModel.linkMailingAddress(id, addressId);
-          }
+        if (application.mailing_address_id) {
+          // Update existing address
+          MailingAddressModel.updateMailingAddress(
+            application.mailing_address_id,
+            validatedData.mailingAddress
+          );
+        } else {
+          // Create new address
+          const addressId = MailingAddressModel.createMailingAddress(
+            id,
+            validatedData.mailingAddress
+          );
+          ApplicationModel.linkMailingAddress(id, addressId);
         }
       }
 
-      // Update or create garaging address
+      // Update or create garaging address (partial data is OK)
       if (validatedData.garagingAddress) {
-        const address = validatedData.garagingAddress;
-        const hasAllFields = address.street && address.city && address.state && address.zipCode;
-
-        if (hasAllFields) {
-          if (application.garaging_address_id) {
-            // Update existing address
-            GaragingAddressModel.updateGaragingAddress(application.garaging_address_id, address);
-          } else {
-            // Create new address
-            const addressId = GaragingAddressModel.createGaragingAddress(id, address);
-            ApplicationModel.linkGaragingAddress(id, addressId);
-          }
+        if (application.garaging_address_id) {
+          // Update existing address
+          GaragingAddressModel.updateGaragingAddress(
+            application.garaging_address_id,
+            validatedData.garagingAddress
+          );
+        } else {
+          // Create new address
+          const addressId = GaragingAddressModel.createGaragingAddress(
+            id,
+            validatedData.garagingAddress
+          );
+          ApplicationModel.linkGaragingAddress(id, addressId);
         }
       }
 
-      // Update or create vehicles
+      // Update or create vehicles (partial data is OK)
       if (validatedData.vehicles) {
         for (const [vehicleId, vehicle] of Object.entries(validatedData.vehicles)) {
-          const hasAllFields = vehicle.make && vehicle.model && vehicle.year && vehicle.vin;
+          // Check if vehicle exists
+          const existingVehicle = VehicleModel.getVehicleById(vehicleId, id);
 
-          if (hasAllFields) {
-            // Check if vehicle exists
-            const existingVehicle = VehicleModel.getVehicleById(vehicleId, id);
-
-            if (existingVehicle) {
-              // Update existing vehicle
-              VehicleModel.updateVehicle(vehicleId, id, vehicle);
-            } else {
-              // Create new vehicle
-              VehicleModel.createVehicle(vehicleId, id, vehicle);
-            }
+          if (existingVehicle) {
+            // Update existing vehicle
+            VehicleModel.updateVehicle(vehicleId, id, vehicle);
+          } else {
+            // Create new vehicle
+            VehicleModel.createVehicle(vehicleId, id, vehicle);
           }
         }
       }
 
-      // Update or create additional drivers
+      // Update or create additional drivers (partial data is OK)
       if (validatedData.additionalDrivers) {
         for (const [driverId, driver] of Object.entries(validatedData.additionalDrivers)) {
-          const hasAllFields =
-            driver.firstName &&
-            driver.lastName &&
-            driver.dateOfBirth &&
-            driver.gender &&
-            driver.relationship;
+          // Check if driver exists
+          const existingDriver = AdditionalDriverModel.getAdditionalDriverById(driverId, id);
 
-          if (hasAllFields) {
-            // Check if driver exists
-            const existingDriver = AdditionalDriverModel.getAdditionalDriverById(driverId, id);
-
-            if (existingDriver) {
-              // Update existing driver
-              AdditionalDriverModel.updateAdditionalDriver(driverId, id, driver);
-            } else {
-              // Create new driver
-              AdditionalDriverModel.createAdditionalDriver(driverId, id, driver);
-            }
+          if (existingDriver) {
+            // Update existing driver
+            AdditionalDriverModel.updateAdditionalDriver(driverId, id, driver);
+          } else {
+            // Create new driver
+            AdditionalDriverModel.createAdditionalDriver(driverId, id, driver);
           }
         }
       }

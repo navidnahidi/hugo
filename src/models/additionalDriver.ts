@@ -1,17 +1,6 @@
 import { db } from './db';
 import type { AdditionalDriver } from '../controllers/schemas/application';
-
-export interface AdditionalDriverRecord {
-  id: string;
-  application_id: string;
-  first_name: string;
-  last_name: string;
-  date_of_birth: string;
-  gender: string;
-  relationship: string;
-  created_at: string;
-  updated_at: string;
-}
+import type { AdditionalDriverRecord } from './types';
 
 export function createAdditionalDriver(
   driverId: string,
@@ -28,11 +17,11 @@ export function createAdditionalDriver(
   ).run(
     driverId,
     applicationId,
-    driver.firstName!,
-    driver.lastName!,
-    driver.dateOfBirth!,
-    driver.gender!,
-    driver.relationship!
+    driver.firstName || null,
+    driver.lastName || null,
+    driver.dateOfBirth || null,
+    driver.gender || null,
+    driver.relationship || null
   );
 }
 
@@ -58,6 +47,9 @@ export function updateAdditionalDriver(
   applicationId: string,
   driver: AdditionalDriver
 ): void {
+  // Get existing driver to merge with
+  const existing = getAdditionalDriverById(driverId, applicationId);
+
   db.prepare(
     `
     UPDATE additional_drivers SET
@@ -70,11 +62,11 @@ export function updateAdditionalDriver(
     WHERE id = ? AND application_id = ?
   `
   ).run(
-    driver.firstName!,
-    driver.lastName!,
-    driver.dateOfBirth!,
-    driver.gender!,
-    driver.relationship!,
+    driver.firstName ?? existing?.first_name ?? null,
+    driver.lastName ?? existing?.last_name ?? null,
+    driver.dateOfBirth ?? existing?.date_of_birth ?? null,
+    driver.gender ?? existing?.gender ?? null,
+    driver.relationship ?? existing?.relationship ?? null,
     driverId,
     applicationId
   );

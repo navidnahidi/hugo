@@ -1,23 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import { db } from './db';
 import type { PrimaryDriver } from '../controllers/schemas/application';
+import type { PrimaryDriverRecord } from './types';
 
-export interface PrimaryDriverRecord {
-  id: string;
-  first_name: string;
-  last_name: string;
-  date_of_birth: string;
-  gender: string;
-  marital_status: string;
-  drivers_license_number: string;
-  drivers_license_state: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export function createPrimaryDriver(
-  driver: PrimaryDriver & { driversLicense: NonNullable<PrimaryDriver['driversLicense']> }
-): string {
+export function createPrimaryDriver(driver: PrimaryDriver): string {
   const driverId = uuidv4();
   db.prepare(
     `
@@ -29,13 +15,13 @@ export function createPrimaryDriver(
   `
   ).run(
     driverId,
-    driver.firstName!,
-    driver.lastName!,
-    driver.dateOfBirth!,
-    driver.gender!,
-    driver.maritalStatus!,
-    driver.driversLicense.number,
-    driver.driversLicense.state
+    driver.firstName || null,
+    driver.lastName || null,
+    driver.dateOfBirth || null,
+    driver.gender || null,
+    driver.maritalStatus || null,
+    driver.driversLicense?.number || null,
+    driver.driversLicense?.state || null
   );
   return driverId;
 }
@@ -46,10 +32,10 @@ export function getPrimaryDriverById(id: string): PrimaryDriverRecord | undefine
     | undefined;
 }
 
-export function updatePrimaryDriver(
-  id: string,
-  driver: PrimaryDriver & { driversLicense: NonNullable<PrimaryDriver['driversLicense']> }
-): void {
+export function updatePrimaryDriver(id: string, driver: PrimaryDriver): void {
+  // Get existing driver to merge with
+  const existing = getPrimaryDriverById(id);
+
   db.prepare(
     `
     UPDATE primary_drivers SET
@@ -64,13 +50,13 @@ export function updatePrimaryDriver(
     WHERE id = ?
   `
   ).run(
-    driver.firstName!,
-    driver.lastName!,
-    driver.dateOfBirth!,
-    driver.gender!,
-    driver.maritalStatus!,
-    driver.driversLicense.number,
-    driver.driversLicense.state,
+    driver.firstName ?? existing?.first_name ?? null,
+    driver.lastName ?? existing?.last_name ?? null,
+    driver.dateOfBirth ?? existing?.date_of_birth ?? null,
+    driver.gender ?? existing?.gender ?? null,
+    driver.maritalStatus ?? existing?.marital_status ?? null,
+    driver.driversLicense?.number ?? existing?.drivers_license_number ?? null,
+    driver.driversLicense?.state ?? existing?.drivers_license_state ?? null,
     id
   );
 }

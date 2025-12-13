@@ -1,18 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { db } from './db';
 import type { AddressWithUnit } from '../controllers/schemas/application';
-
-export interface MailingAddressRecord {
-  id: string;
-  application_id: string;
-  street: string;
-  unit: string | null;
-  city: string;
-  state: string;
-  zip_code: string;
-  created_at: string;
-  updated_at: string;
-}
+import type { MailingAddressRecord } from './types';
 
 export function createMailingAddress(applicationId: string, address: AddressWithUnit): string {
   const addressId = uuidv4();
@@ -26,11 +15,11 @@ export function createMailingAddress(applicationId: string, address: AddressWith
   ).run(
     addressId,
     applicationId,
-    address.street!,
+    address.street || null,
     address.unit || null,
-    address.city!,
-    address.state!,
-    address.zipCode!
+    address.city || null,
+    address.state || null,
+    address.zipCode || null
   );
   return addressId;
 }
@@ -42,6 +31,9 @@ export function getMailingAddressById(id: string): MailingAddressRecord | undefi
 }
 
 export function updateMailingAddress(id: string, address: AddressWithUnit): void {
+  // Get existing address to merge with
+  const existing = getMailingAddressById(id);
+
   db.prepare(
     `
     UPDATE mailing_addresses SET
@@ -53,5 +45,12 @@ export function updateMailingAddress(id: string, address: AddressWithUnit): void
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `
-  ).run(address.street!, address.unit || null, address.city!, address.state!, address.zipCode!, id);
+  ).run(
+    address.street ?? existing?.street ?? null,
+    address.unit ?? existing?.unit ?? null,
+    address.city ?? existing?.city ?? null,
+    address.state ?? existing?.state ?? null,
+    address.zipCode ?? existing?.zip_code ?? null,
+    id
+  );
 }

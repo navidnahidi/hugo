@@ -1,17 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
-import { db, dbAsync } from './db';
-
-export interface ApplicationRecord {
-  id: string;
-  primary_driver_id: string | null;
-  mailing_address_id: string | null;
-  garaging_address_id: string | null;
-  status: string;
-  submitted_at: string | null;
-  quote_price: number | null;
-  created_at: string;
-  updated_at: string;
-}
+import { db } from './db';
+import type { ApplicationRecord } from './types';
 
 export function createApplication(): string {
   const applicationId = uuidv4();
