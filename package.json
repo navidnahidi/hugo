@@ -1,0 +1,28 @@
+{
+    "name": "hugo-backend-interview-challenge",
+    "version": "1.0.0",
+    "description": "Hugo backend take home challenge",
+    "main": "index.js",
+    "scripts": {
+        "test": "vitest"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+ssh://git@github.com/popularlab/hugo-backend-interview-challenge.git"
+    },
+    "author": "Hugo Engineering <tech@withhugo.com>",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/popularlab/hugo-backend-interview-challenge/issues"
+    },
+    "homepage": "https://github.com/popularlab/hugo-backend-interview-challenge#readme",
+    "devDependencies": {
+        "@types/node": "^22.10.0",
+        "prettier": "^3.4.1",
+        "typescript": "^5.7.2",
+        "vitest": "^2.1.6"
+    },
+    "dependencies": {
+        "dotenv": "^16.4.5"
+    }
+}
