@@ -16,7 +16,7 @@ process.env.NODE_ENV = 'test';
 // Run migrations before tests
 beforeAll(async () => {
   // Clean up test database if it exists
-  const testDbPath = process.env.TEST_DB_PATH || 'test.db';
+  const testDbPath = process.env.TEST_DB_PATH || path.join(process.cwd(), 'test.db');
   if (fs.existsSync(testDbPath)) {
     fs.unlinkSync(testDbPath);
   }
