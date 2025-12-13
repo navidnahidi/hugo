@@ -21,4 +21,6 @@ dist-ssr
 .DS_Store
 
 *.db
+*.db-wal
+*.db-shm
 test.db

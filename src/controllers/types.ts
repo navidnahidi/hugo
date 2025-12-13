@@ -1,4 +1,4 @@
-import { ZodError } from 'zod';
+import type { ZodError } from 'zod';
 
 // Type for unvalidated JSON input
 export type JsonValue = string | number | boolean | null | JsonObject | JsonArray;
@@ -29,13 +29,13 @@ export interface GetApplicationResult {
     unit?: string;
     city?: string;
     state?: string;
-    zipCode?: string;
+    zip?: string;
   };
   garagingAddress?: {
     street?: string;
     city?: string;
     state?: string;
-    zipCode?: string;
+    zip?: string;
   };
   vehicles?: {
     [id: string]: {
@@ -56,13 +56,25 @@ export interface GetApplicationResult {
   };
   status: string;
   submittedAt?: string;
-  quotePrice?: number;
+  quotePrice?: number; // Calculated price if valid, or existing price if submitted
+  validationErrors?: ZodError['issues']; // List of validation errors if not complete
   createdAt: string;
   updatedAt: string;
 }
 
 export interface UpdateApplicationResult {
   id: string;
+  message: string;
+}
+
+export interface DeleteApplicationDataResult {
+  id: string;
+  message: string;
+}
+
+export interface SubmitApplicationResult {
+  id: string;
+  quotePrice: number;
   message: string;
 }
 
@@ -91,3 +103,9 @@ export interface ForbiddenError {
 export type CreateApplicationError = ValidationError | ServerError;
 export type GetApplicationError = NotFoundError | ServerError;
 export type UpdateApplicationError = NotFoundError | ForbiddenError | ValidationError | ServerError;
+export type DeleteApplicationDataError =
+  | NotFoundError
+  | ForbiddenError
+  | ValidationError
+  | ServerError;
+export type SubmitApplicationError = NotFoundError | ForbiddenError | ValidationError | ServerError;

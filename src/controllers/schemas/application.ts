@@ -90,63 +90,274 @@ const genderSchema = z.enum(['male', 'female', 'non-binary']);
 const createAgeValidation = (minAge: number, errorMessage: string) =>
   dateStringSchema.refine((date) => calculateAge(date) >= minAge, { message: errorMessage });
 
-// Driver's License Schema
-const driversLicenseSchema = z.object({
-  number: z
-    .string()
-    .length(9, "Driver's license number must be exactly 9 characters")
-    .regex(/^[A-Z0-9]{9}$/, "Driver's license number must be 9 uppercase alphanumeric characters")
-    .transform((val) => val.toUpperCase()),
-  state: stateSchema,
-});
+// Current year for vehicle validation
+const currentYear = new Date().getFullYear();
 
-// Base address schema
-const baseAddressSchema = {
-  street: nameSchema,
-  city: nameSchema,
-  state: stateSchema,
-  zipCode: zipCodeSchema,
-};
-
-// Address Schema (for garaging address)
-export const addressSchema = z.object(baseAddressSchema).partial();
-
-// Address with Unit Schema (for mailing address)
-export const addressWithUnitSchema = z
+// Comprehensive Application Schema matching README structure
+// All fields are partial to allow incremental updates
+export const applicationSchema = z
   .object({
-    ...baseAddressSchema,
-    unit: z.string().optional(),
+    // Primary Driver
+    primaryDriver: z
+      .object({
+        firstName: nameSchema,
+        lastName: nameSchema,
+        dateOfBirth: createAgeValidation(18, 'Primary driver must be at least 18 years old'),
+        gender: genderSchema,
+        maritalStatus: z.enum(['single', 'married', 'divorced', 'widowed'], {
+          message: 'Marital status must be one of: single, married, divorced, widowed',
+        }),
+        driversLicense: z.object({
+          number: z
+            .string()
+            .length(9, "Driver's license number must be exactly 9 characters")
+            .regex(
+              /^[A-Z0-9]{9}$/,
+              "Driver's license number must be 9 uppercase alphanumeric characters"
+            )
+            .transform((val) => val.toUpperCase()),
+          state: stateSchema,
+        }),
+      })
+      .partial()
+      .optional(),
+
+    // Mailing Address (with optional unit)
+    mailingAddress: z
+      .object({
+        street: nameSchema.optional(),
+        unit: z.string().optional(), // Optional field
+        city: nameSchema.optional(),
+        state: stateSchema.optional(),
+        zip: zipCodeSchema.optional(),
+      })
+      .partial()
+      .optional(),
+
+    // Garaging Address
+    garagingAddress: z
+      .object({
+        street: nameSchema.optional(),
+        city: nameSchema.optional(),
+        state: stateSchema.optional(),
+        zip: zipCodeSchema.optional(),
+      })
+      .partial()
+      .optional(),
+
+    // Vehicles (record with ID as key)
+    // Application must have at least 1 vehicle and max 3 vehicles (enforced in schema)
+    vehicles: z
+      .record(
+        z.string(),
+        z
+          .object({
+            make: nameSchema,
+            model: nameSchema,
+            year: z
+              .number()
+              .int('Year must be an integer')
+              .min(1985, 'Year must be 1985 or later')
+              .max(currentYear + 1, `Year must be ${currentYear + 1} or earlier`),
+            vin: z
+              .string()
+              .length(17, 'VIN must be exactly 17 characters')
+              .regex(
+                /^[0-9A-HJ-NPR-Z]{17}$/,
+                'VIN contains invalid characters (I, O, Q are not allowed)'
+              )
+              .transform((val) => val.toUpperCase()),
+          })
+          .partial()
+      )
+      .refine(
+        (vehicles) => {
+          if (!vehicles) return true; // Optional field, so undefined/null is valid for partial updates
+          const count = Object.keys(vehicles).length;
+          return count >= 1 && count <= 3;
+        },
+        {
+          message: 'Application must have at least 1 vehicle and not more than 3 vehicles',
+        }
+      )
+      .optional(),
+
+    // Additional Drivers (record with ID as key)
+    // Application may have additional drivers, max 3 (enforced in schema)
+    additionalDrivers: z
+      .record(
+        z.string(),
+        z
+          .object({
+            firstName: nameSchema,
+            lastName: nameSchema,
+            dateOfBirth: createAgeValidation(16, 'Additional driver must be at least 16 years old'),
+            gender: genderSchema,
+            relationship: z.enum(['spouse', 'child', 'parent', 'sibling', 'other'], {
+              message: 'Relationship must be one of: spouse, child, parent, sibling, other',
+            }),
+          })
+          .partial()
+      )
+      .refine(
+        (drivers) => {
+          if (!drivers) return true; // Optional field, so undefined/null is valid
+          return Object.keys(drivers).length <= 3;
+        },
+        {
+          message: 'Application must not have more than 3 additional drivers',
+        }
+      )
+      .optional(),
   })
-  .partial();
+  .partial() // Allow partial updates at the top level
+  .strict(); // Reject unknown fields
 
-// Base driver fields
-const baseDriverFields = {
-  firstName: nameSchema,
-  lastName: nameSchema,
-  gender: genderSchema,
-};
+// Strict schema for submission - all required fields must be present
+export const applicationSubmissionSchema = z
+  .object({
+    // Primary Driver - REQUIRED for submission
+    primaryDriver: z.object({
+      firstName: nameSchema,
+      lastName: nameSchema,
+      dateOfBirth: createAgeValidation(18, 'Primary driver must be at least 18 years old'),
+      gender: genderSchema,
+      maritalStatus: z.enum(['single', 'married', 'divorced', 'widowed'], {
+        message: 'Marital status must be one of: single, married, divorced, widowed',
+      }),
+      driversLicense: z.object({
+        number: z
+          .string()
+          .length(9, "Driver's license number must be exactly 9 characters")
+          .regex(
+            /^[A-Z0-9]{9}$/,
+            "Driver's license number must be 9 uppercase alphanumeric characters"
+          )
+          .transform((val) => val.toUpperCase()),
+        state: stateSchema,
+      }),
+    }),
 
-// Primary Driver Schema
+    // Mailing Address - REQUIRED for submission
+    mailingAddress: z.object({
+      street: nameSchema,
+      unit: z.string().optional(), // Optional field
+      city: nameSchema,
+      state: stateSchema,
+      zip: zipCodeSchema,
+    }),
+
+    // Garaging Address - REQUIRED for submission
+    garagingAddress: z.object({
+      street: nameSchema,
+      city: nameSchema,
+      state: stateSchema,
+      zip: zipCodeSchema,
+    }),
+
+    // Vehicles - REQUIRED for submission (1-3 vehicles)
+    vehicles: z
+      .record(
+        z.string(),
+        z.object({
+          make: nameSchema,
+          model: nameSchema,
+          year: z
+            .number()
+            .int('Year must be an integer')
+            .min(1985, 'Year must be 1985 or later')
+            .max(currentYear + 1, `Year must be ${currentYear + 1} or earlier`),
+          vin: z
+            .string()
+            .length(17, 'VIN must be exactly 17 characters')
+            .regex(
+              /^[0-9A-HJ-NPR-Z]{17}$/,
+              'VIN contains invalid characters (I, O, Q are not allowed)'
+            )
+            .transform((val) => val.toUpperCase()),
+        })
+      )
+      .refine(
+        (vehicles) => {
+          const count = Object.keys(vehicles).length;
+          return count >= 1 && count <= 3;
+        },
+        {
+          message: 'Application must have at least 1 vehicle and not more than 3 vehicles',
+        }
+      ),
+
+    // Additional Drivers - OPTIONAL for submission (max 3)
+    additionalDrivers: z
+      .record(
+        z.string(),
+        z.object({
+          firstName: nameSchema,
+          lastName: nameSchema,
+          dateOfBirth: createAgeValidation(16, 'Additional driver must be at least 16 years old'),
+          gender: genderSchema,
+          relationship: z.enum(['spouse', 'child', 'parent', 'sibling', 'other'], {
+            message: 'Relationship must be one of: spouse, child, parent, sibling, other',
+          }),
+        })
+      )
+      .refine(
+        (drivers) => {
+          if (!drivers) return true; // Optional, so empty is OK
+          return Object.keys(drivers).length <= 3;
+        },
+        {
+          message: 'Application must not have more than 3 additional drivers',
+        }
+      )
+      .optional(),
+  })
+  .strict(); // Reject unknown fields
+
+// Individual component schemas for reuse (exported for backward compatibility)
+// These match the structure in the main applicationSchema
 export const primaryDriverSchema = z
   .object({
-    ...baseDriverFields,
+    firstName: nameSchema,
+    lastName: nameSchema,
     dateOfBirth: createAgeValidation(18, 'Primary driver must be at least 18 years old'),
-    maritalStatus: z.enum(['single', 'married', 'divorced', 'widowed']),
-    driversLicense: driversLicenseSchema,
+    gender: genderSchema,
+    maritalStatus: z.enum(['single', 'married', 'divorced', 'widowed'], {
+      message: 'Marital status must be one of: single, married, divorced, widowed',
+    }),
+    driversLicense: z.object({
+      number: z
+        .string()
+        .length(9, "Driver's license number must be exactly 9 characters")
+        .regex(
+          /^[A-Z0-9]{9}$/,
+          "Driver's license number must be 9 uppercase alphanumeric characters"
+        )
+        .transform((val) => val.toUpperCase()),
+      state: stateSchema,
+    }),
   })
   .partial();
 
-// Additional Driver Schema
-export const additionalDriverSchema = z
+export const addressWithUnitSchema = z
   .object({
-    ...baseDriverFields,
-    dateOfBirth: createAgeValidation(16, 'Additional driver must be at least 16 years old'),
-    relationship: z.enum(['spouse', 'child', 'parent', 'sibling', 'other']),
+    street: nameSchema,
+    unit: z.string().optional(), // Optional field
+    city: nameSchema,
+    state: stateSchema,
+    zip: zipCodeSchema,
   })
   .partial();
 
-// Vehicle Schema
-const currentYear = new Date().getFullYear();
+export const addressSchema = z
+  .object({
+    street: nameSchema,
+    city: nameSchema,
+    state: stateSchema,
+    zip: zipCodeSchema,
+  })
+  .partial();
+
 export const vehicleSchema = z
   .object({
     make: nameSchema,
@@ -164,21 +375,22 @@ export const vehicleSchema = z
   })
   .partial();
 
-// Application Schema (allows partial data)
-export const applicationSchema = z
+export const additionalDriverSchema = z
   .object({
-    primaryDriver: primaryDriverSchema.optional(),
-    mailingAddress: addressWithUnitSchema.optional(),
-    garagingAddress: addressSchema.optional(),
-    vehicles: z.record(z.string(), vehicleSchema).optional(),
-    additionalDrivers: z.record(z.string(), additionalDriverSchema).optional(),
+    firstName: nameSchema,
+    lastName: nameSchema,
+    dateOfBirth: createAgeValidation(16, 'Additional driver must be at least 16 years old'),
+    gender: genderSchema,
+    relationship: z.enum(['spouse', 'child', 'parent', 'sibling', 'other'], {
+      message: 'Relationship must be one of: spouse, child, parent, sibling, other',
+    }),
   })
-  .strict(); // Reject unknown fields
+  .partial();
 
 // Type exports
-export type PrimaryDriver = z.infer<typeof primaryDriverSchema>;
-export type Vehicle = z.infer<typeof vehicleSchema>;
-export type Address = z.infer<typeof addressSchema>;
-export type AddressWithUnit = z.infer<typeof addressWithUnitSchema>;
-export type AdditionalDriver = z.infer<typeof additionalDriverSchema>;
 export type Application = z.infer<typeof applicationSchema>;
+export type PrimaryDriver = z.infer<typeof primaryDriverSchema>;
+export type AddressWithUnit = z.infer<typeof addressWithUnitSchema>;
+export type Address = z.infer<typeof addressSchema>;
+export type Vehicle = z.infer<typeof vehicleSchema>;
+export type AdditionalDriver = z.infer<typeof additionalDriverSchema>;

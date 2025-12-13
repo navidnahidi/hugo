@@ -1,12 +1,10 @@
 import { ZodError } from 'zod';
-import { applicationSchema } from './schemas/application';
-import { db, dbAsync } from '../models/db';
+import {
+  applicationSchema,
+  applicationSubmissionSchema,
+  type Application,
+} from './schemas/application';
 import * as ApplicationModel from '../models/application';
-import * as PrimaryDriverModel from '../models/primaryDriver';
-import * as MailingAddressModel from '../models/mailingAddress';
-import * as GaragingAddressModel from '../models/garagingAddress';
-import * as VehicleModel from '../models/vehicle';
-import * as AdditionalDriverModel from '../models/additionalDriver';
 import type {
   JsonObject,
   CreateApplicationResult,
@@ -15,62 +13,23 @@ import type {
   GetApplicationError,
   UpdateApplicationResult,
   UpdateApplicationError,
-  ValidationError,
+  DeleteApplicationDataResult,
+  DeleteApplicationDataError,
+  SubmitApplicationResult,
+  SubmitApplicationError,
 } from './types';
 
 export async function createApplication(
   data: JsonObject
 ): Promise<CreateApplicationResult | CreateApplicationError> {
   try {
-    // Validate request data
+    // Validate request data using Zod schema
+    // Schema allows partial data and validates all provided fields
     const validatedData = applicationSchema.parse(data);
 
-    // Create application
-    const applicationId = ApplicationModel.createApplication();
-
-    // Start transaction
-    const transaction = db.transaction(() => {
-      // Create primary driver if provided (partial data is OK - Zod validates what's provided)
-      if (validatedData.primaryDriver) {
-        const driverId = PrimaryDriverModel.createPrimaryDriver(validatedData.primaryDriver);
-        ApplicationModel.linkPrimaryDriver(applicationId, driverId);
-      }
-
-      // Create mailing address if provided (partial data is OK)
-      if (validatedData.mailingAddress) {
-        const addressId = MailingAddressModel.createMailingAddress(
-          applicationId,
-          validatedData.mailingAddress
-        );
-        ApplicationModel.linkMailingAddress(applicationId, addressId);
-      }
-
-      // Create garaging address if provided (partial data is OK)
-      if (validatedData.garagingAddress) {
-        const addressId = GaragingAddressModel.createGaragingAddress(
-          applicationId,
-          validatedData.garagingAddress
-        );
-        ApplicationModel.linkGaragingAddress(applicationId, addressId);
-      }
-
-      // Create vehicles if provided (partial data is OK)
-      if (validatedData.vehicles) {
-        for (const [vehicleId, vehicle] of Object.entries(validatedData.vehicles)) {
-          VehicleModel.createVehicle(vehicleId, applicationId, vehicle);
-        }
-      }
-
-      // Create additional drivers if provided (partial data is OK)
-      if (validatedData.additionalDrivers) {
-        for (const [driverId, driver] of Object.entries(validatedData.additionalDrivers)) {
-          AdditionalDriverModel.createAdditionalDriver(driverId, applicationId, driver);
-        }
-      }
-    });
-
-    // Execute transaction
-    await dbAsync(() => transaction());
+    // Create application with validated JSON data
+    // The model will store the JSON in the data column
+    const applicationId = ApplicationModel.createApplication(validatedData);
 
     // Return created application
     return {
@@ -98,7 +57,7 @@ export async function getApplication(
   id: string
 ): Promise<GetApplicationResult | GetApplicationError> {
   try {
-    // Get application
+    // Get application record
     const application = ApplicationModel.getApplicationById(id);
 
     if (!application) {
@@ -108,141 +67,48 @@ export async function getApplication(
       };
     }
 
+    // Get JSON data from the application
+    const applicationData = ApplicationModel.getApplicationData(id);
+
+    // Build result with metadata and JSON data
     const result: GetApplicationResult = {
       id: application.id,
       status: application.status,
       createdAt: application.created_at,
       updatedAt: application.updated_at,
+      ...applicationData, // Spread the JSON data (primaryDriver, mailingAddress, etc.)
     };
 
     if (application.submitted_at) {
       result.submittedAt = application.submitted_at;
     }
 
-    if (application.quote_price !== null) {
+    // If already submitted, return the existing quote price
+    if (application.status === 'submitted' && application.quote_price !== null) {
       result.quotePrice = application.quote_price;
+      return result;
     }
 
-    // Get primary driver if exists
-    if (application.primary_driver_id) {
-      const driver = PrimaryDriverModel.getPrimaryDriverById(application.primary_driver_id);
+    // If not submitted, validate the application data
+    if (applicationData) {
+      const validationResult = applicationSchema.safeParse(applicationData);
 
-      if (driver) {
-        const primaryDriver: {
-          firstName?: string;
-          lastName?: string;
-          dateOfBirth?: string;
-          gender?: string;
-          maritalStatus?: string;
-          driversLicense?: { number: string; state: string };
-        } = {};
-        if (driver.first_name) primaryDriver.firstName = driver.first_name;
-        if (driver.last_name) primaryDriver.lastName = driver.last_name;
-        if (driver.date_of_birth) primaryDriver.dateOfBirth = driver.date_of_birth;
-        if (driver.gender) primaryDriver.gender = driver.gender;
-        if (driver.marital_status) primaryDriver.maritalStatus = driver.marital_status;
-        if (driver.drivers_license_number && driver.drivers_license_state) {
-          primaryDriver.driversLicense = {
-            number: driver.drivers_license_number,
-            state: driver.drivers_license_state,
-          };
-        }
-        if (Object.keys(primaryDriver).length > 0) {
-          result.primaryDriver = primaryDriver;
-        }
+      if (validationResult.success) {
+        // Application is valid - calculate and include quote price
+        result.quotePrice = generateQuotePrice();
+      } else {
+        // Application has validation errors - include them in the response
+        result.validationErrors = validationResult.error.issues;
       }
-    }
-
-    // Get mailing address if exists
-    if (application.mailing_address_id) {
-      const address = MailingAddressModel.getMailingAddressById(application.mailing_address_id);
-
-      if (address) {
-        const mailingAddress: {
-          street?: string;
-          city?: string;
-          state?: string;
-          zipCode?: string;
-          unit?: string;
-        } = {};
-        if (address.street) mailingAddress.street = address.street;
-        if (address.city) mailingAddress.city = address.city;
-        if (address.state) mailingAddress.state = address.state;
-        if (address.zip_code) mailingAddress.zipCode = address.zip_code;
-        if (address.unit) mailingAddress.unit = address.unit;
-        if (Object.keys(mailingAddress).length > 0) {
-          result.mailingAddress = mailingAddress;
-        }
-      }
-    }
-
-    // Get garaging address if exists
-    if (application.garaging_address_id) {
-      const address = GaragingAddressModel.getGaragingAddressById(application.garaging_address_id);
-
-      if (address) {
-        const garagingAddress: {
-          street?: string;
-          city?: string;
-          state?: string;
-          zipCode?: string;
-        } = {};
-        if (address.street) garagingAddress.street = address.street;
-        if (address.city) garagingAddress.city = address.city;
-        if (address.state) garagingAddress.state = address.state;
-        if (address.zip_code) garagingAddress.zipCode = address.zip_code;
-        if (Object.keys(garagingAddress).length > 0) {
-          result.garagingAddress = garagingAddress;
-        }
-      }
-    }
-
-    // Get vehicles
-    const vehicles = VehicleModel.getVehiclesByApplicationId(application.id);
-
-    if (vehicles.length > 0) {
-      result.vehicles = {};
-      for (const vehicle of vehicles) {
-        const vehicleData: {
-          make?: string;
-          model?: string;
-          year?: number;
-          vin?: string;
-        } = {};
-        if (vehicle.make) vehicleData.make = vehicle.make;
-        if (vehicle.model) vehicleData.model = vehicle.model;
-        if (vehicle.year !== null) vehicleData.year = vehicle.year;
-        if (vehicle.vin) vehicleData.vin = vehicle.vin;
-        if (Object.keys(vehicleData).length > 0) {
-          result.vehicles[vehicle.id] = vehicleData;
-        }
-      }
-    }
-
-    // Get additional drivers
-    const additionalDrivers = AdditionalDriverModel.getAdditionalDriversByApplicationId(
-      application.id
-    );
-
-    if (additionalDrivers.length > 0) {
-      result.additionalDrivers = {};
-      for (const driver of additionalDrivers) {
-        const driverData: {
-          firstName?: string;
-          lastName?: string;
-          dateOfBirth?: string;
-          gender?: string;
-          relationship?: string;
-        } = {};
-        if (driver.first_name) driverData.firstName = driver.first_name;
-        if (driver.last_name) driverData.lastName = driver.last_name;
-        if (driver.date_of_birth) driverData.dateOfBirth = driver.date_of_birth;
-        if (driver.gender) driverData.gender = driver.gender;
-        if (driver.relationship) driverData.relationship = driver.relationship;
-        if (Object.keys(driverData).length > 0) {
-          result.additionalDrivers[driver.id] = driverData;
-        }
-      }
+    } else {
+      // No application data - return validation error
+      result.validationErrors = [
+        {
+          code: 'custom',
+          path: [],
+          message: 'Application data is missing',
+        },
+      ];
     }
 
     return result;
@@ -256,15 +122,72 @@ export async function getApplication(
   }
 }
 
+// Helper function to deep merge objects
+function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial<T>): T {
+  const result = { ...target };
+
+  for (const key in source) {
+    if (source[key] !== undefined) {
+      const sourceValue = source[key];
+      const targetValue = result[key];
+
+      // Handle records (vehicles, additionalDrivers) - merge at record level
+      if (key === 'vehicles' || key === 'additionalDrivers') {
+        const targetRecord = (targetValue as Record<string, unknown>) || {};
+        const sourceRecord = (sourceValue as Record<string, unknown>) || {};
+
+        // Merge records: combine keys, and deep merge values if same key exists
+        const mergedRecord: Record<string, unknown> = { ...targetRecord };
+        for (const recordKey in sourceRecord) {
+          if (
+            targetRecord[recordKey] &&
+            typeof targetRecord[recordKey] === 'object' &&
+            !Array.isArray(targetRecord[recordKey])
+          ) {
+            // Deep merge the nested object
+            mergedRecord[recordKey] = deepMerge(
+              targetRecord[recordKey] as Record<string, unknown>,
+              sourceRecord[recordKey] as Record<string, unknown>
+            );
+          } else {
+            // Replace or add new
+            mergedRecord[recordKey] = sourceRecord[recordKey];
+          }
+        }
+        result[key] = mergedRecord as T[Extract<keyof T, string>];
+      }
+      // Deep merge nested objects (primaryDriver, mailingAddress, etc.)
+      else if (
+        sourceValue &&
+        typeof sourceValue === 'object' &&
+        !Array.isArray(sourceValue) &&
+        targetValue &&
+        typeof targetValue === 'object' &&
+        !Array.isArray(targetValue)
+      ) {
+        result[key] = deepMerge(
+          targetValue as Record<string, unknown>,
+          sourceValue as Record<string, unknown>
+        ) as T[Extract<keyof T, string>];
+      } else {
+        // Replace primitive or simple value
+        result[key] = sourceValue as T[Extract<keyof T, string>];
+      }
+    }
+  }
+
+  return result;
+}
+
 export async function updateApplication(
   id: string,
   data: JsonObject
 ): Promise<UpdateApplicationResult | UpdateApplicationError> {
   try {
-    // Validate request data
-    const validatedData = applicationSchema.parse(data);
+    // Validate partial update data (schema allows partial)
+    const validatedPartialData = applicationSchema.parse(data);
 
-    // Get existing application
+    // Get existing application record
     const application = ApplicationModel.getApplicationById(id);
 
     if (!application) {
@@ -282,97 +205,17 @@ export async function updateApplication(
       };
     }
 
-    // Start transaction
-    const transaction = db.transaction(() => {
-      // Update application timestamp
-      ApplicationModel.updateApplicationTimestamp(id);
+    // Get existing application JSON data
+    const existingData = ApplicationModel.getApplicationData(id) || ({} as Application);
 
-      // Update or create primary driver (partial data is OK - Zod validates what's provided)
-      if (validatedData.primaryDriver) {
-        if (application.primary_driver_id) {
-          // Update existing primary driver
-          PrimaryDriverModel.updatePrimaryDriver(
-            application.primary_driver_id,
-            validatedData.primaryDriver
-          );
-        } else {
-          // Create new primary driver
-          const driverId = PrimaryDriverModel.createPrimaryDriver(validatedData.primaryDriver);
-          ApplicationModel.linkPrimaryDriver(id, driverId);
-        }
-      }
+    // Deep merge existing data with new partial data
+    const mergedData = deepMerge(existingData, validatedPartialData);
 
-      // Update or create mailing address (partial data is OK)
-      if (validatedData.mailingAddress) {
-        if (application.mailing_address_id) {
-          // Update existing address
-          MailingAddressModel.updateMailingAddress(
-            application.mailing_address_id,
-            validatedData.mailingAddress
-          );
-        } else {
-          // Create new address
-          const addressId = MailingAddressModel.createMailingAddress(
-            id,
-            validatedData.mailingAddress
-          );
-          ApplicationModel.linkMailingAddress(id, addressId);
-        }
-      }
+    // Validate the merged data to ensure it's still valid
+    const validatedMergedData = applicationSchema.parse(mergedData);
 
-      // Update or create garaging address (partial data is OK)
-      if (validatedData.garagingAddress) {
-        if (application.garaging_address_id) {
-          // Update existing address
-          GaragingAddressModel.updateGaragingAddress(
-            application.garaging_address_id,
-            validatedData.garagingAddress
-          );
-        } else {
-          // Create new address
-          const addressId = GaragingAddressModel.createGaragingAddress(
-            id,
-            validatedData.garagingAddress
-          );
-          ApplicationModel.linkGaragingAddress(id, addressId);
-        }
-      }
-
-      // Update or create vehicles (partial data is OK)
-      if (validatedData.vehicles) {
-        for (const [vehicleId, vehicle] of Object.entries(validatedData.vehicles)) {
-          // Check if vehicle exists
-          const existingVehicle = VehicleModel.getVehicleById(vehicleId, id);
-
-          if (existingVehicle) {
-            // Update existing vehicle
-            VehicleModel.updateVehicle(vehicleId, id, vehicle);
-          } else {
-            // Create new vehicle
-            VehicleModel.createVehicle(vehicleId, id, vehicle);
-          }
-        }
-      }
-
-      // Update or create additional drivers (partial data is OK)
-      if (validatedData.additionalDrivers) {
-        for (const [driverId, driver] of Object.entries(validatedData.additionalDrivers)) {
-          // Check if driver exists
-          const existingDriver = AdditionalDriverModel.getAdditionalDriverById(driverId, id);
-
-          if (existingDriver) {
-            // Update existing driver
-            AdditionalDriverModel.updateAdditionalDriver(driverId, id, driver);
-          } else {
-            // Create new driver
-            AdditionalDriverModel.createAdditionalDriver(driverId, id, driver);
-          }
-        }
-      }
-    });
-
-    // Execute transaction
-    await dbAsync(() => transaction());
+    // Update application JSON data in database
+    ApplicationModel.updateApplicationData(id, validatedMergedData);
 
     return {
       id,
@@ -388,6 +231,249 @@ export async function updateApplication(
 
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     console.error('Error updating application:', error);
+    return {
+      error: 'Internal server error',
+      message: errorMessage,
+    };
+  }
+}
+
+// Helper function to delete a property from an object using a dot-separated path
+function deleteByPath(obj: Record<string, unknown>, path: string): boolean {
+  const parts = path.split('.');
+
+  if (parts.length === 0) {
+    return false;
+  }
+
+  // Navigate to the parent of the property to delete
+  let current: unknown = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i];
+    if (current && typeof current === 'object' && !Array.isArray(current) && part in current) {
+      current = (current as Record<string, unknown>)[part];
+    } else {
+      // Path doesn't exist
+      return false;
+    }
+  }
+
+  // Delete the final property
+  const finalKey = parts[parts.length - 1];
+  if (current && typeof current === 'object' && !Array.isArray(current) && finalKey in current) {
+    delete (current as Record<string, unknown>)[finalKey];
+    return true;
+  }
+
+  return false;
+}
+
+export async function deleteApplicationData(
+  id: string,
+  path: string
+): Promise<DeleteApplicationDataResult | DeleteApplicationDataError> {
+  try {
+    // Validate path is not empty
+    if (!path || typeof path !== 'string' || path.trim().length === 0) {
+      return {
+        error: 'Validation error',
+        details: [
+          {
+            code: 'custom',
+            path: ['path'],
+            message: 'Path is required and must be a non-empty string',
+          },
+        ],
+      };
+    }
+
+    // Get existing application record
+    const application = ApplicationModel.getApplicationById(id);
+
+    if (!application) {
+      return {
+        error: 'Not found',
+        message: `Application with id ${id} not found`,
+      };
+    }
+
+    // Check if application is already submitted
+    if (application.status === 'submitted') {
+      return {
+        error: 'Forbidden',
+        message: 'Cannot delete data from a submitted application',
+      };
+    }
+
+    // Get existing application JSON data
+    const existingData = ApplicationModel.getApplicationData(id);
+
+    if (!existingData) {
+      return {
+        error: 'Not found',
+        message: `Application data not found for id ${id}`,
+      };
+    }
+
+    // Create a copy to modify
+    const updatedData = JSON.parse(JSON.stringify(existingData)) as Application;
+
+    // Delete the property at the specified path
+    const deleted = deleteByPath(updatedData, path);
+
+    if (!deleted) {
+      return {
+        error: 'Validation error',
+        details: [
+          {
+            code: 'custom',
+            path: ['path'],
+            message: `Path "${path}" does not exist in the application data`,
+          },
+        ],
+      };
+    }
+
+    // If we deleted a vehicle or additional driver, check if the parent object is now empty
+    // and remove it if so (to avoid validation errors)
+    if (path.startsWith('vehicles.')) {
+      const vehicleId = path.split('.')[1];
+      if (updatedData.vehicles && Object.keys(updatedData.vehicles).length === 0) {
+        delete updatedData.vehicles;
+      }
+    }
+    if (path.startsWith('additionalDrivers.')) {
+      const driverId = path.split('.')[1];
+      if (
+        updatedData.additionalDrivers &&
+        Object.keys(updatedData.additionalDrivers).length === 0
+      ) {
+        delete updatedData.additionalDrivers;
+      }
+    }
+
+    // Validate the updated data is still valid
+    // Use safeParse to get detailed validation errors
+    const validationResult = applicationSchema.safeParse(updatedData);
+
+    if (!validationResult.success) {
+      // Log validation errors for debugging
+      console.error(
+        'Validation error after deletion:',
+        JSON.stringify(validationResult.error.issues, null, 2)
+      );
+      return {
+        error: 'Validation error',
+        details: validationResult.error.issues,
+      };
+    }
+
+    const validatedData = validationResult.data;
+
+    // Update application JSON data in database
+    ApplicationModel.updateApplicationData(id, validatedData);
+
+    return {
+      id,
+      message: `Successfully deleted data at path "${path}"`,
+    };
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return {
+        error: 'Validation error',
+        details: error.issues,
+      };
+    }
+
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    console.error('Error deleting application data:', error);
+    return {
+      error: 'Internal server error',
+      message: errorMessage,
+    };
+  }
+}
+
+// Helper function to generate a random quote price (for exercise purposes)
+function generateQuotePrice(): number {
+  // Generate a random price between $500 and $5000
+  return Math.floor(Math.random() * 4500) + 500;
+}
+
+export async function submitApplication(
+  id: string
+): Promise<SubmitApplicationResult | SubmitApplicationError> {
+  try {
+    // Get existing application record
+    const application = ApplicationModel.getApplicationById(id);
+
+    if (!application) {
+      return {
+        error: 'Not found',
+        message: `Application with id ${id} not found`,
+      };
+    }
+
+    // Check if application is already submitted
+    if (application.status === 'submitted') {
+      return {
+        error: 'Forbidden',
+        message: 'Application has already been submitted',
+      };
+    }
+
+    // Get existing application JSON data to validate it's complete
+    const applicationData = ApplicationModel.getApplicationData(id);
+
+    if (!applicationData) {
+      return {
+        error: 'Validation error',
+        details: [
+          {
+            code: 'custom',
+            path: [],
+            message: 'Application data is missing or incomplete',
+          },
+        ],
+      };
+    }
+
+    // Validate that the application data is complete using the strict submission schema
+    // This ensures all required fields are present before submission
+    const validationResult = applicationSubmissionSchema.safeParse(applicationData);
+
+    if (!validationResult.success) {
+      console.error(
+        'Validation error after submission:',
+        JSON.stringify(validationResult.error.issues, null, 2)
+      );
+      return {
+        error: 'Validation error',
+        details: validationResult.error.issues,
+      };
+    }
+
+    // Generate a random quote price (as per README requirements)
+    const quotePrice = generateQuotePrice();
+
+    // Submit the application (update status, set submitted_at, and quote_price)
+    ApplicationModel.submitApplication(id, quotePrice);
+
+    return {
+      id,
+      quotePrice,
+      message: 'Application submitted successfully',
+    };
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return {
+        error: 'Validation error',
+        details: error.issues,
+      };
+    }
+
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    console.error('Error submitting application:', error);
     return {
       error: 'Internal server error',
       message: errorMessage,
