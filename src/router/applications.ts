@@ -1,4 +1,5 @@
 import Router from '@koa/router';
+import { createApplication } from '../controllers/applications';
 
 const applicationsRouter = new Router({
   prefix: '/applications',
@@ -6,8 +7,15 @@ const applicationsRouter = new Router({
 
 // POST /applications - Initialize a new application
 applicationsRouter.post('/', async (ctx) => {
-  ctx.status = 200;
-  ctx.body = { message: 'POST /applications - stub' };
+  const result = await createApplication(ctx.request.body);
+
+  if ('error' in result) {
+    ctx.status = result.error === 'Validation error' ? 400 : 500;
+    ctx.body = result;
+  } else {
+    ctx.status = 201;
+    ctx.body = result;
+  }
 });
 
 // GET /applications/:id - Get application by ID
@@ -35,4 +43,3 @@ applicationsRouter.post('/:id/submit', async (ctx) => {
 });
 
 export default applicationsRouter;
-

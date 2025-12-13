@@ -40,10 +40,9 @@ export function rollback(db: DatabaseType) {
   db.exec(`DROP INDEX IF EXISTS idx_garaging_addresses_application_id`);
   db.exec(`DROP INDEX IF EXISTS idx_garaging_addresses_state`);
   db.exec(`DROP INDEX IF EXISTS idx_garaging_addresses_zip_code`);
-  
+
   // Drop table
   db.exec(`DROP TABLE IF EXISTS garaging_addresses`);
 
   console.log('Rollback 004: Dropped garaging_addresses table');
 }
-

@@ -40,7 +40,7 @@ async function rollbackMigration() {
   try {
     // Import and execute the rollback function
     const migration = await import(migrationPath);
-    
+
     if (typeof migration.rollback === 'function') {
       migration.rollback(db);
     } else {
@@ -60,4 +60,3 @@ async function rollbackMigration() {
 }
 
 rollbackMigration();
-

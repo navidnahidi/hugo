@@ -44,7 +44,7 @@ async function runMigrations() {
       // Import and execute the migration
       const migrationPath = path.resolve(scriptsDir, migrationFile);
       const migration = await import(migrationPath);
-      
+
       // Call the default exported function with the db instance
       if (typeof migration.default === 'function') {
         migration.default(db);
@@ -67,4 +67,3 @@ async function runMigrations() {
 }
 
 runMigrations();
-

@@ -36,7 +36,7 @@ export function rollback(db: DatabaseType) {
   // Drop indexes
   db.exec(`DROP INDEX IF EXISTS idx_primary_drivers_license_number`);
   db.exec(`DROP INDEX IF EXISTS idx_primary_drivers_license_state`);
-  
+
   // Drop table
   db.exec(`DROP TABLE IF EXISTS primary_drivers`);
 

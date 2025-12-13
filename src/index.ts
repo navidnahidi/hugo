@@ -1,12 +1,16 @@
 import dotenv from 'dotenv';
 import Koa from 'koa';
 import Router from '@koa/router';
+import bodyParser from '@koa/bodyparser';
 import applicationsRouter from './router/applications';
 
 dotenv.config();
 
 const app = new Koa();
 const router = new Router();
+
+// Add body parser middleware
+app.use(bodyParser());
 
 // Basic health check route
 router.get('/', async (ctx) => {

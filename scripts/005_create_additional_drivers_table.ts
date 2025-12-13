@@ -38,10 +38,9 @@ export function rollback(db: DatabaseType) {
   // Drop indexes
   db.exec(`DROP INDEX IF EXISTS idx_additional_drivers_application_id`);
   db.exec(`DROP INDEX IF EXISTS idx_additional_drivers_relationship`);
-  
+
   // Drop table
   db.exec(`DROP TABLE IF EXISTS additional_drivers`);
 
   console.log('Rollback 005: Dropped additional_drivers table');
 }
-
