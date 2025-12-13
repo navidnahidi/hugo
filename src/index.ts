@@ -3,11 +3,15 @@ import Koa from 'koa';
 import Router from '@koa/router';
 import bodyParser from '@koa/bodyparser';
 import applicationsRouter from './router/applications';
+import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
 
 const app = new Koa();
 const router = new Router();
+
+// Add error handling middleware first (to catch errors from all routes)
+app.use(errorHandler);
 
 // Add body parser middleware
 // Include DELETE in parsedMethods so DELETE requests with JSON bodies are parsed
