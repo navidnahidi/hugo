@@ -4,7 +4,9 @@
     "description": "Hugo backend take home challenge",
     "main": "index.js",
     "scripts": {
-        "test": "vitest"
+        "test": "vitest",
+        "dev": "nodemon --exec tsx src/index.ts",
+        "start": "tsx src/index.ts"
     },
     "repository": {
         "type": "git",
@@ -18,11 +20,18 @@
     "homepage": "https://github.com/popularlab/hugo-backend-interview-challenge#readme",
     "devDependencies": {
         "@types/node": "^22.10.0",
+        "nodemon": "^3.1.11",
         "prettier": "^3.4.1",
+        "tsx": "^4.21.0",
         "typescript": "^5.7.2",
         "vitest": "^2.1.6"
     },
     "dependencies": {
-        "dotenv": "^16.4.5"
+        "@koa/router": "^15.1.0",
+        "@types/koa": "^3.0.1",
+        "@types/koa__router": "^12.0.5",
+        "dotenv": "^16.4.5",
+        "koa": "^3.1.1",
+        "zod": "^4.1.13"
     }
 }
