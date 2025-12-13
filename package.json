@@ -6,7 +6,9 @@
     "scripts": {
         "test": "vitest",
         "dev": "nodemon --exec tsx src/index.ts",
-        "start": "tsx src/index.ts"
+        "start": "tsx src/index.ts",
+        "migrate": "tsx scripts/migrate.ts",
+        "rollback": "tsx scripts/rollback.ts"
     },
     "repository": {
         "type": "git",
