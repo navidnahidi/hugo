@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { post, patch, get, url } from './test-utils';
+import { post, patch, get, url, getDateString } from './test-utils';
 
 test('should update an application with partial data', async () => {
   // Create an application
@@ -283,7 +283,7 @@ test('should return 404 when updating non-existent application', async () => {
 test('should update additional drivers', async () => {
   const minAge16Date = new Date();
   minAge16Date.setFullYear(minAge16Date.getFullYear() - 16);
-  const minAge16DateStr = minAge16Date.toISOString().split('T')[0]!;
+  const minAge16DateStr = getDateString(minAge16Date);
 
   // Create an application
   let response = await post(`${url}/applications`, {

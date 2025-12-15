@@ -39,7 +39,7 @@ beforeAll(async () => {
 });
 
 // HTTP helper functions
-export const del = async (url: string, body: any) =>
+export const del = async (url: string, body: unknown) =>
   fetch(url, {
     method: 'DELETE',
     headers: {
@@ -48,7 +48,7 @@ export const del = async (url: string, body: any) =>
     body: JSON.stringify(body),
   });
 
-export const post = async (url: string, body: any) =>
+export const post = async (url: string, body: unknown) =>
   fetch(url, {
     method: 'POST',
     headers: {
@@ -57,7 +57,7 @@ export const post = async (url: string, body: any) =>
     body: JSON.stringify(body),
   });
 
-export const patch = async (url: string, body: any) =>
+export const patch = async (url: string, body: unknown) =>
   fetch(url, {
     method: 'PATCH',
     headers: {
@@ -70,3 +70,12 @@ export const get = async (url: string) => fetch(url);
 
 // Base URL for API requests
 export const url = `http://localhost:${process.env.PORT || 3000}`;
+
+// Helper to safely get date string in YYYY-MM-DD format
+export function getDateString(date: Date): string {
+  const dateStr = date.toISOString().split('T')[0];
+  if (!dateStr) {
+    throw new Error('Failed to format date');
+  }
+  return dateStr;
+}

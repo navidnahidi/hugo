@@ -1,9 +1,19 @@
 import { expect, test } from 'vitest';
 import { post, patch, url } from './test-utils';
+
+// Helper to safely get date string in YYYY-MM-DD format
+function getDateString(date: Date): string {
+  const dateStr = date.toISOString().split('T')[0];
+  if (!dateStr) {
+    throw new Error('Failed to format date');
+  }
+  return dateStr;
+}
+
 const currentYear = new Date().getFullYear();
 const minAge18Date = new Date();
 minAge18Date.setFullYear(minAge18Date.getFullYear() - 18);
-const minAge18DateStr = minAge18Date.toISOString().split('T')[0]!;
+const minAge18DateStr = getDateString(minAge18Date);
 
 // Helper to create a valid application for PATCH tests
 async function createValidApplication() {
@@ -41,7 +51,7 @@ test('POST /applications should reject invalid date format (timestamp)', async (
 test('POST /applications should reject primary driver too young (< 18)', async () => {
   const tooYoungDate = new Date();
   tooYoungDate.setFullYear(tooYoungDate.getFullYear() - 17);
-  const tooYoungDateStr = tooYoungDate.toISOString().split('T')[0]!;
+  const tooYoungDateStr = getDateString(tooYoungDate);
   const response = await post(`${url}/applications`, {
     primaryDriver: {
       firstName: 'Test',
@@ -203,7 +213,6 @@ test('POST /applications should reject vehicle year after current year + 1', asy
   expect(response.status).toBe(400);
   const body = await response.json();
   expect(body.error).toBe('Validation error');
-  const nextYear = currentYear + 1;
   expect(body.message).toContain('or earlier');
   expect(body.message).toContain('year');
   expect(body.details).toBeDefined();
@@ -431,7 +440,7 @@ test('POST /applications should reject invalid state in garaging address', async
 test('POST /applications should reject additional driver too young (< 16)', async () => {
   const tooYoung16Date = new Date();
   tooYoung16Date.setFullYear(tooYoung16Date.getFullYear() - 15);
-  const tooYoung16DateStr = tooYoung16Date.toISOString().split('T')[0]!;
+  const tooYoung16DateStr = getDateString(tooYoung16Date);
   const response = await post(`${url}/applications`, {
     primaryDriver: {
       firstName: 'Test',
@@ -486,7 +495,7 @@ test('POST /applications should reject invalid relationship', async () => {
 test('POST /applications should reject more than 3 additional drivers', async () => {
   const minAge16Date = new Date();
   minAge16Date.setFullYear(minAge16Date.getFullYear() - 16);
-  const minAge16DateStr = minAge16Date.toISOString().split('T')[0]!;
+  const minAge16DateStr = getDateString(minAge16Date);
   const response = await post(`${url}/applications`, {
     primaryDriver: {
       firstName: 'Test',
@@ -554,7 +563,7 @@ test('PATCH /applications/:id should reject primary driver too young (< 18)', as
   const id = await createValidApplication();
   const tooYoungDate = new Date();
   tooYoungDate.setFullYear(tooYoungDate.getFullYear() - 17);
-  const tooYoungDateStr = tooYoungDate.toISOString().split('T')[0]!;
+  const tooYoungDateStr = getDateString(tooYoungDate);
   const response = await patch(`${url}/applications/${id}`, {
     primaryDriver: {
       dateOfBirth: tooYoungDateStr,
@@ -864,7 +873,7 @@ test('PATCH /applications/:id should reject additional driver too young (< 16)',
   const id = await createValidApplication();
   const tooYoung16Date = new Date();
   tooYoung16Date.setFullYear(tooYoung16Date.getFullYear() - 15);
-  const tooYoung16DateStr = tooYoung16Date.toISOString().split('T')[0]!;
+  const tooYoung16DateStr = getDateString(tooYoung16Date);
   const response = await patch(`${url}/applications/${id}`, {
     additionalDrivers: {
       DRIVER1: {
@@ -929,7 +938,7 @@ test('PATCH /applications/:id should reject more than 3 additional drivers', asy
   const id = await createValidApplication();
   const minAge16Date = new Date();
   minAge16Date.setFullYear(minAge16Date.getFullYear() - 16);
-  const minAge16DateStr = minAge16Date.toISOString().split('T')[0]!;
+  const minAge16DateStr = getDateString(minAge16Date);
   const response = await patch(`${url}/applications/${id}`, {
     additionalDrivers: {
       D1: {

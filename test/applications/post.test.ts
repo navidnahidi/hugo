@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
-import { post, patch, url } from './test-utils';
+import { post, url, getDateString } from './test-utils';
+import type { ZodIssue } from 'zod';
 
 test('should create an application with partial data', async () => {
   // Create an application with only partial data
@@ -145,7 +146,7 @@ test('should return validation errors when submitting an incomplete application'
   expect(body.details.length).toBeGreaterThan(0);
 
   // Verify the validation errors indicate what's missing
-  const errorPaths = body.details.map((detail: any) => detail.path.join('.'));
+  const errorPaths = (body.details as ZodIssue[]).map((detail) => detail.path.join('.'));
 
   // Should include errors for missing required fields
   expect(errorPaths.some((path: string) => path.includes('primaryDriver.gender'))).toBe(true);
@@ -211,7 +212,6 @@ test('should not allow submitting an already submitted application', async () =>
   expect(response.status).toBe(200);
   body = await response.json();
   expect(body.quotePrice).toBeDefined();
-  const firstQuotePrice = body.quotePrice;
 
   // Try to submit again
   response = await post(`${url}/applications/${id}/submit`, {});
@@ -242,7 +242,7 @@ test('should create an application with minimal required fields for primary driv
 test('should create an application with vehicles and additional drivers', async () => {
   const minAge16Date = new Date();
   minAge16Date.setFullYear(minAge16Date.getFullYear() - 16);
-  const minAge16DateStr = minAge16Date.toISOString().split('T')[0]!;
+  const minAge16DateStr = getDateString(minAge16Date);
 
   // Create an application with vehicles and additional drivers
   const response = await post(`${url}/applications`, {

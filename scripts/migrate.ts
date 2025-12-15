@@ -37,10 +37,13 @@ const migrationFiles = fs
   .sort();
 
 // Get already executed migrations
-const executedMigrations = db
-  .prepare('SELECT name FROM migrations')
-  .all()
-  .map((row: any) => row.name);
+interface MigrationRow {
+  name: string;
+}
+
+const executedMigrations = (db.prepare('SELECT name FROM migrations').all() as MigrationRow[]).map(
+  (row) => row.name
+);
 
 console.log(`Found ${migrationFiles.length} migration file(s)`);
 console.log(`Already executed: ${executedMigrations.length}`);

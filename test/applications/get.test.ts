@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { post, patch, get, url } from './test-utils';
+import type { ZodIssue } from 'zod';
 
 test('should return application data with quote price when application is completely valid', async () => {
   // Create a complete, valid application
@@ -105,7 +106,7 @@ test('should return validation errors when application is incomplete', async () 
   expect(body.quotePrice).toBeUndefined();
 
   // Verify validation errors indicate what's missing
-  const errorPaths = body.validationErrors.map((error: any) => error.path.join('.'));
+  const errorPaths = (body.validationErrors as ZodIssue[]).map((error) => error.path.join('.'));
   expect(errorPaths.some((path: string) => path.includes('primaryDriver.gender'))).toBe(true);
   expect(errorPaths.some((path: string) => path.includes('primaryDriver.maritalStatus'))).toBe(
     true
@@ -230,7 +231,7 @@ test('should return validation errors for partially complete application', async
   expect(body.quotePrice).toBeUndefined();
 
   // Verify specific missing fields are in validation errors
-  const errorPaths = body.validationErrors.map((error: any) => error.path.join('.'));
+  const errorPaths = (body.validationErrors as ZodIssue[]).map((error) => error.path.join('.'));
   expect(errorPaths.some((path: string) => path.includes('primaryDriver.driversLicense'))).toBe(
     true
   );
@@ -274,7 +275,7 @@ test('should return validation errors when application has invalid data', async 
   expect(body.quotePrice).toBeUndefined();
 
   // Verify validation errors check for the right things - all required fields
-  const errorPaths = body.validationErrors.map((error: any) => error.path.join('.'));
+  const errorPaths = (body.validationErrors as ZodIssue[]).map((error) => error.path.join('.'));
 
   // Check for primary driver required fields
   expect(errorPaths.some((path: string) => path.includes('primaryDriver.gender'))).toBe(true);
@@ -293,7 +294,7 @@ test('should return validation errors when application has invalid data', async 
   expect(errorPaths.some((path: string) => path.includes('vehicles'))).toBe(true);
 
   // Verify error structure - each error should have required properties
-  body.validationErrors.forEach((error: any) => {
+  (body.validationErrors as ZodIssue[]).forEach((error) => {
     expect(error).toHaveProperty('code');
     expect(error).toHaveProperty('path');
     expect(error).toHaveProperty('message');

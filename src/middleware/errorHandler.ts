@@ -11,7 +11,10 @@ function formatValidationMessage(details: ZodIssue[]): string {
   }
 
   if (details.length === 1) {
-    const issue = details[0]!;
+    const issue = details[0];
+    if (!issue) {
+      return 'Validation failed';
+    }
     const path = issue.path.length > 0 ? issue.path.join('.') : 'field';
     return `Validation error: ${path} - ${issue.message}`;
   }

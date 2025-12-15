@@ -27,8 +27,9 @@ function getDb(): DatabaseType {
   const dbPath = getDbPath();
 
   // Return cached connection if it exists
-  if (dbCache.has(dbPath)) {
-    return dbCache.get(dbPath)!;
+  const cachedDb = dbCache.get(dbPath);
+  if (cachedDb) {
+    return cachedDb;
   }
 
   // Ensure the database file exists and is writable
@@ -43,7 +44,7 @@ function getDb(): DatabaseType {
     try {
       // Check if file is writable, if not, make it writable
       fs.accessSync(dbPath, fs.constants.W_OK);
-    } catch (error) {
+    } catch {
       // File exists but is not writable - try to make it writable
       fs.chmodSync(dbPath, 0o666);
     }
@@ -81,7 +82,8 @@ function getDb(): DatabaseType {
 // Export a getter that always returns the correct database based on current environment
 export const db = new Proxy({} as DatabaseType, {
   get(_target, prop) {
-    return (getDb() as any)[prop];
+    const dbInstance = getDb();
+    return (dbInstance as unknown as Record<string | symbol, unknown>)[prop];
   },
 });
 

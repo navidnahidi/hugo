@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { del, post, get, url } from './test-utils';
+import { del, post, get, url, getDateString } from './test-utils';
 
 test('should not allow deleting data from a submitted application', async () => {
   // Create and complete an application
@@ -244,7 +244,7 @@ test('should successfully delete a vehicle from vehicles', async () => {
 test('should successfully delete an additional driver', async () => {
   const minAge16Date = new Date();
   minAge16Date.setFullYear(minAge16Date.getFullYear() - 16);
-  const minAge16DateStr = minAge16Date.toISOString().split('T')[0]!;
+  const minAge16DateStr = getDateString(minAge16Date);
 
   // Create an application with additional drivers
   let response = await post(`${url}/applications`, {

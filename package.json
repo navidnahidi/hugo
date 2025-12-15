@@ -11,7 +11,9 @@
         "migrate": "tsx scripts/migrate.ts",
         "rollback": "tsx scripts/rollback.ts",
         "format": "prettier --write \"src/**/*.{ts,json}\" \"scripts/**/*.ts\" \"test/**/*.ts\"",
-        "format:check": "prettier --check \"src/**/*.{ts,json}\" \"scripts/**/*.ts\" \"test/**/*.ts\""
+        "format:check": "prettier --check \"src/**/*.{ts,json}\" \"scripts/**/*.ts\" \"test/**/*.ts\"",
+        "lint": "eslint \"src/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.ts\"",
+        "lint:fix": "eslint \"src/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.ts\" --fix"
     },
     "repository": {
         "type": "git",
@@ -24,13 +26,18 @@
     },
     "homepage": "https://github.com/popularlab/hugo-backend-interview-challenge#readme",
     "devDependencies": {
+        "@eslint/js": "^9.39.2",
         "@types/better-sqlite3": "^7.6.13",
         "@types/node": "^22.10.0",
         "@types/uuid": "^11.0.0",
+        "@typescript-eslint/eslint-plugin": "^8.50.0",
+        "@typescript-eslint/parser": "^8.50.0",
+        "eslint": "^9.39.2",
         "nodemon": "^3.1.11",
         "prettier": "^3.4.1",
         "tsx": "^4.21.0",
         "typescript": "^5.7.2",
+        "typescript-eslint": "^8.50.0",
         "vitest": "^2.1.6"
     },
     "dependencies": {
