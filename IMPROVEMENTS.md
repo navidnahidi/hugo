@@ -10,6 +10,9 @@ This document outlines improvements and changes I would make if given more time 
 # DELETE endpoint
 * This doesn't really delete the application, but just modifies it.  Instead we can create or handle via our PATCH endpoint.  If we were to create a new one we can use `/applications/:id/delete`
 
+# Handle migrations better
+* Right now we're using our own migration.  We can use typeorm or something else more mature to handle migrations (or rewrite it make it better for the long term).  It works for this simple exercise, but I'm not sure what we will run into in the long term
+
 # Quotes don't have a window
 * Quotes are infinite and that doesn't seem realistic as a car quote can change depending on many factors like # of claims, accidents, etc...  So we need a window that they are valid for
 
