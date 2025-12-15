@@ -24,3 +24,4 @@ dist-ssr
 *.db-wal
 *.db-shm
 test.db
+.env.test

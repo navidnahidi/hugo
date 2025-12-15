@@ -4,7 +4,7 @@
     "description": "Hugo backend take home challenge",
     "main": "index.js",
     "scripts": {
-        "test": "vitest",
+        "test": "sh -c 'NODE_ENV=test tsx src/index.ts & SERVER_PID=$!; sleep 2; vitest; EXIT_CODE=$?; kill $SERVER_PID 2>/dev/null || true; exit $EXIT_CODE'",
         "test:server": "NODE_ENV=test tsx src/index.ts",
         "dev": "nodemon --exec tsx src/index.ts",
         "start": "tsx src/index.ts",

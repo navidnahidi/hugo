@@ -1,16 +1,21 @@
 import Database from 'better-sqlite3';
+import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 
-// Use test database in test environment, otherwise use DB_PATH or default
-const getDbPath = () => {
-  if (process.env.NODE_ENV === 'test') {
-    return process.env.TEST_DB_PATH || path.join(process.cwd(), 'test.db');
-  }
-  return process.env.DB_PATH || path.join(process.cwd(), 'applications.db');
-};
+// Load environment variables
+// Load .env.test if NODE_ENV is test, otherwise load .env
+if (process.env.NODE_ENV === 'test') {
+  dotenv.config({ path: path.resolve(process.cwd(), '.env.test') });
+} else {
+  dotenv.config();
+}
 
-const dbPath = getDbPath();
+// Determine database path based on environment
+const dbPath =
+  process.env.NODE_ENV === 'test'
+    ? path.resolve(process.cwd(), process.env.TEST_DB_PATH || './test.db')
+    : path.resolve(process.cwd(), process.env.DB_PATH || './applications.db');
 
 // Ensure the database directory exists
 const dbDir = path.dirname(dbPath);
@@ -21,6 +26,7 @@ if (!fs.existsSync(dbDir)) {
 const db = new Database(dbPath);
 
 // Create migrations table to track which migrations have been run
+// Use IF NOT EXISTS to avoid errors if table already exists
 db.exec(`
   CREATE TABLE IF NOT EXISTS migrations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,8 +77,23 @@ async function runMigrations() {
       }
 
       // Record the migration as executed
-      db.prepare('INSERT INTO migrations (name) VALUES (?)').run(migrationFile);
-      console.log(`✅ Completed ${migrationFile}`);
+      // Use INSERT OR IGNORE to handle case where migration was already recorded
+      try {
+        db.prepare('INSERT INTO migrations (name) VALUES (?)').run(migrationFile);
+        console.log(`✅ Completed ${migrationFile}`);
+      } catch (error: unknown) {
+        // If migration already exists (UNIQUE constraint), that's okay - skip it
+        if (
+          error &&
+          typeof error === 'object' &&
+          'code' in error &&
+          error.code === 'SQLITE_CONSTRAINT_UNIQUE'
+        ) {
+          console.log(`⏭️  Skipping ${migrationFile} (already recorded in migrations table)`);
+        } else {
+          throw error;
+        }
+      }
     } catch (error) {
       console.error(`❌ Error running ${migrationFile}:`, error);
       db.close();

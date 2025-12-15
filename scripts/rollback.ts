@@ -1,16 +1,21 @@
 import Database from 'better-sqlite3';
+import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 
-// Use test database in test environment, otherwise use DB_PATH or default
-const getDbPath = () => {
-  if (process.env.NODE_ENV === 'test') {
-    return process.env.TEST_DB_PATH || path.join(process.cwd(), 'test.db');
-  }
-  return process.env.DB_PATH || path.join(process.cwd(), 'applications.db');
-};
+// Load environment variables
+// Load .env.test if NODE_ENV is test, otherwise load .env
+if (process.env.NODE_ENV === 'test') {
+  dotenv.config({ path: path.resolve(process.cwd(), '.env.test') });
+} else {
+  dotenv.config();
+}
 
-const dbPath = getDbPath();
+// Determine database path based on environment
+const dbPath =
+  process.env.NODE_ENV === 'test'
+    ? path.resolve(process.cwd(), process.env.TEST_DB_PATH || './test.db')
+    : path.resolve(process.cwd(), process.env.DB_PATH || './applications.db');
 
 // Ensure the database directory exists
 const dbDir = path.dirname(dbPath);
