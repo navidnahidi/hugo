@@ -4,7 +4,16 @@
     "description": "Hugo backend take home challenge",
     "main": "index.js",
     "scripts": {
-        "test": "vitest"
+        "test": "sh -c 'NODE_ENV=test tsx src/index.ts & SERVER_PID=$!; sleep 2; vitest; EXIT_CODE=$?; kill $SERVER_PID 2>/dev/null || true; exit $EXIT_CODE'",
+        "test:server": "NODE_ENV=test tsx src/index.ts",
+        "dev": "nodemon --exec tsx src/index.ts",
+        "start": "tsx src/index.ts",
+        "migrate": "tsx scripts/migrate.ts",
+        "rollback": "tsx scripts/rollback.ts",
+        "format": "prettier --write \"src/**/*.{ts,json}\" \"scripts/**/*.ts\" \"test/**/*.ts\"",
+        "format:check": "prettier --check \"src/**/*.{ts,json}\" \"scripts/**/*.ts\" \"test/**/*.ts\"",
+        "lint": "eslint \"src/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.ts\"",
+        "lint:fix": "eslint \"src/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.ts\" --fix"
     },
     "repository": {
         "type": "git",
@@ -17,12 +26,29 @@
     },
     "homepage": "https://github.com/popularlab/hugo-backend-interview-challenge#readme",
     "devDependencies": {
+        "@eslint/js": "^9.39.2",
+        "@types/better-sqlite3": "^7.6.13",
         "@types/node": "^22.10.0",
+        "@types/uuid": "^11.0.0",
+        "@typescript-eslint/eslint-plugin": "^8.50.0",
+        "@typescript-eslint/parser": "^8.50.0",
+        "eslint": "^9.39.2",
+        "nodemon": "^3.1.11",
         "prettier": "^3.4.1",
+        "tsx": "^4.21.0",
         "typescript": "^5.7.2",
+        "typescript-eslint": "^8.50.0",
         "vitest": "^2.1.6"
     },
     "dependencies": {
-        "dotenv": "^16.4.5"
+        "@koa/bodyparser": "^6.0.0",
+        "@koa/router": "^15.1.0",
+        "@types/koa": "^3.0.1",
+        "@types/koa__router": "^12.0.5",
+        "better-sqlite3": "^12.5.0",
+        "dotenv": "^16.4.5",
+        "koa": "^3.1.1",
+        "uuid": "^13.0.0",
+        "zod": "^4.1.13"
     }
 }

@@ -19,3 +19,9 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+*.db
+*.db-wal
+*.db-shm
+test.db
+.env.test
