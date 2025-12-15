@@ -7,6 +7,9 @@ This document outlines improvements and changes I would make if given more time 
 # Authorization and Authentication
 * Currently we have no authentication or authorization, so any one can create or update any one elses application.  We can use our `middleware` directory here and utiilize JWT here.
 
+# Arbitrary id when creating vehicles or additional drivers
+* Right now we allow the client to pass in the id to us which can be random and not really reliable.  Instead, we should just allow them to pass in the `Vehicle` or `AdditionalDriver` and we can respond with a generated id for them to use based on a composite key (vin, etc...) or a snowflake id of some sort.
+
 # DELETE endpoint
 * This doesn't really delete the application, but just modifies it.  Instead we can create or handle via our PATCH endpoint.  If we were to create a new one we can use `/applications/:id/delete`
 
